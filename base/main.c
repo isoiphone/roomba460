@@ -41,6 +41,23 @@ void set_leds(bool R1, bool G1, bool R2, bool G2)
 }
 
 
+void init_joystick()
+{
+	DDRE &= ~_BV(PORTE5);
+	PORTE |= _BV(PORTE5);
+}
+
+
+void poll_joystick()
+{
+	if (PINE & _BV(PORTE5)) {
+		//uart_putchar('1');
+	} else {
+		//uart_putchar('0');
+	}
+}
+
+
 int main(int argc, char *argv[])
 {
 	// red, red
@@ -55,6 +72,8 @@ int main(int argc, char *argv[])
 		radio_init(SEND_ADDRESS, TRANSMIT_MODE);
 		// amber, amber
 		set_leds(true,true,true,true);
+
+		init_joystick();
 
 	allow_interupts(true);
 
@@ -71,6 +90,7 @@ int main(int argc, char *argv[])
 	int tick=0;
 	bool flashLed = false;
 	while (1) {
+		//poll_joystick();
 		uart_println("tick: %d\r\n",tick);
 		tick++;
 
