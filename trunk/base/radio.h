@@ -1,123 +1,152 @@
-/**
- * @file   radio.h
+/*
+ * radio.h
  *
- * @brief  QKits TXRX24G transceiver module
+ *  Created on: 24-Jan-2009
+ *      Author: Neil MacMillan
  *
- * CSC 460/560 Real Time Operating Systems - Mantis Cheng
+ *  References:
+ *    Ball, Brennen.  DIYEmbedded Tutorials.  http://www.diyembedded.com/
+ *    Engelke, Stefan.  AVR-Lib/nRF24L01.  http://www.tinkerer.eu/AVRLib/nRF24L01
+ *    Nordic Semiconductor.  nRF24L01 Product Specification 2.0.  http://www.nordicsemi.no/files/Product/data_sheet/nRF24L01_Product_Specification_v2_0.pdf
  *
- * @author Scott Craig
- * @author Justin Tanner
- * @author Leanne Ross
- * @author Mantis Cheng
- *
- * @section version_history Version History
- *
- * 1.0 initial design by Scott Craig
- * 1.1 removed radio_print()
- * 1.2 clean up and refactoring
+ *    Most of the hard work for this was done by [Engelke].
  */
 
-#ifndef __RADIO_H__
-#define __RADIO_H__
+#ifndef RADIO_H_
+#define RADIO_H_
 
 #include "common.h"
+#include <stddef.h>
+#include <string.h>
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include "util/delay.h"
+#include "nRF24L01.h"
+#include "packet.h"
+#include "spi.h"
+
+#define RADIO_ADDRESS_LENGTH 5
+
+typedef enum _radio_pipe {
+	RADIO_PIPE_0 = 0,
+	RADIO_PIPE_1 = 1,
+	RADIO_PIPE_2 = 2,
+	RADIO_PIPE_3 = 3,
+	RADIO_PIPE_4 = 4,
+	RADIO_PIPE_5 = 5,
+	RADIO_PIPE_EMPTY = 7,	// FIFO is empty when pipe number bits in status register are 0b111.
+} RADIO_PIPE;
+
+typedef enum _radio_tx_power {
+	RADIO_LOWEST_POWER = 0,		// -18 dBm (about 16 uW)
+	RADIO_LOW_POWER = 1,		// -12 dBm (about 63 uW)
+	RADIO_HIGH_POWER = 2,		// -6 dBm (about 251 uW)
+	RADIO_HIGHEST_POWER = 3,	// 0 dBm (1 mW)
+} RADIO_TX_POWER;
+
+typedef enum _radio_dr {
+	RADIO_1MBPS = 0,		// that's Mbps, not MBps.
+	RADIO_2MBPS = 1,
+} RADIO_DATA_RATE;
+
+typedef enum _radio_receive {
+	RADIO_RX_INVALID_ARGS,		// one of the arguments to Radio_Receive was invalid
+	RADIO_RX_TRANSMITTING,		// the radio was transmitting
+	RADIO_RX_FIFO_EMPTY,		// there aren't any packets in the Rx FIFO to receive (Radio_Receive does not receive data)
+	RADIO_RX_MORE_PACKETS,		// after copying out the head of the Rx FIFO, there is still another packet in the FIFO.
+	RADIO_RX_SUCCESS,			// there was a packet to receive, it was successfully received, and the Rx FIFO is now empty.
+} RADIO_RX_STATUS;
+
+typedef enum _radio_transmit {
+	RADIO_TX_MAX_RT,
+	RADIO_TX_SUCCESS,
+} RADIO_TX_STATUS;
+
+typedef enum _radio_tx_wait {
+	RADIO_WAIT_FOR_TX,
+	RADIO_RETURN_ON_TX,
+} RADIO_TX_WAIT;
+
+typedef enum _radio_ack {
+	RADIO_ACK,
+	RADIO_NO_ACK,
+} RADIO_USE_ACK;
+
+typedef enum _ed {
+	DISABLE=0,
+	ENABLE=1,
+} ON_OFF;		// there's got to be a better name for this.
+
+void Radio_Init();
+
 
 /**
- * Depending on what other things the processor is doing packets may
- * be dropped at the receiver. 500 us is too short. 1 ms works.
- * 2 ms gives more time
+ * Configure one of the radio's six Rx pipes.
+ * This configures a pipe's address and enables or disables the pipe.  Pipes 0 and 1 are enabled by default, and pipes 2-5 are
+ * 		disabled by default.  The configuration for pipe 0 will be changed while the radio is transmitting, to facilitate auto-
+ * 		ack.  It will be changed back when the transmission is completed.
+ * \param pipe The pipe to configure.
+ * \param address The 1- or 5-byte address to give the pipe.  For pipes 0 and 1 all five bytes can be different, but
+ * 		pipes 2-5 share the four most significant bytes of pipe 1's address.  The LSB of each pipe's address must be unique.
+ * 		For example:
+ * 				Pipe 0: 0x0123456789
+ * 				Pipe 1:	0x9876543210
+ * 				Pipe 2: 0x98765432AB
+ * 				Pipe 3: 0x98765432BC
+ * 				Pipe 4: 0x98765432CD
+ * 				Pipe 5: 0x98765432DE
+ * 		If pipe 0 or 1 is being configured, then address must be a 5-byte array.  If the other four pipes are being configured,
+ * 		then the first byte of address is used as the LSB of the pipe's address (i.e. you only pass a 1-byte address, with the
+ * 		four MSBytes of the pipe's address left implied).  For example, this will set the first four pipe addresses above:
+ * 				uint8_t address[5] = {0x01, 0x23, 0x45, 0x67, 0x89};
+ * 				Radio_Configure_Rx(RADIO_PIPE_0, address, ENABLE);
+ * 				address = {0x98, 0x76, 0x54, 0x32, 0x10};
+ * 				Radio_Configure_Rx(RADIO_PIPE_1, address, ENABLE);
+ * 				address[0] = 0xAB;
+ * 				Radio_Configure_Rx(RADIO_PIPE_2, address, ENABLE);
+ * 				address[0] = 0xBC;
+ * 				Radio_Configure_Rx(RADIO_PIPE_3, address, ENABLE);
+ * 				...
+ * \param enable Enable or disable the pipe.
  */
-#define DELAY_MS_BETWEEN_PACKETS   2
+void Radio_Configure_Rx(RADIO_PIPE pipe, uint8_t* address, ON_OFF enable);
 
-/** Configuration data */
-#define CFG_VECT_LEN    15
-/** PAYLOAD_BYTES: 28 = (32 bytes - 2 bytes_address - 2 bytes_CRC) */
-#define PAYLOAD_BYTES   28
-#define RADIO_BUF_LEN   256
+/**
+ * Configure the radio transceiver.
+ * \param dr The data rate at which the radio will transmit and receive data (1 Mbps or 2 Mbps).
+ * \param power The transmitter's power output.
+ */
+void Radio_Configure(RADIO_DATA_RATE dr, RADIO_TX_POWER power);
 
-/** Configuration values */
-#define DATA2_W      0                   // not used
-#define DATA1_W      (PAYLOAD_BYTES*8)
-#define ADDR2        0,0,0,0,0           // not used
-#define ADDR1        0,0,0,0xAC,0xDC     // address can be up to 5 bytes
+/**
+ * Set the radio transmitter's address.
+ * \param The 5-byte address that packets will be sent to.
+ */
+void Radio_Set_Tx_Addr(uint8_t* address);
 
-/** 16-bit addr, 16-bit CRC, CRC_EN */
-#define ADDRW_CRC    ((16 << 2) | _BV(1) | _BV(0))
+/**
+ * Transmit some data to another station.
+ * \param payload The data packet to transmit.
+ * \param wait If this is RADIO_WAIT, then Radio_Transmit will not return until the transmission is completed
+ * 		successfully or fails.  If this is RADIO_DO_NOT_WAIT then Radio_Transmit will return as soon as the
+ * 		payload is loaded onto the radio and the transmission is started (in this case, Radio_Is_Transmitting
+ * 		can be used to determine if the radio is busy).
+ * \return If wait was RADIO_DO_NOT_WAIT, then Radio_Transmit always returns RADIO_TX_SUCCESS.  If wait was
+ * 		RADIO_WAIT and the transmission was successful (TX_DS interrupt asserted, i.e. the ack packet was
+ * 		received), Radio_Transmit returns RADIO_TX_SUCCESS.  If wait was RADIO_WAIT and the transmission failed
+ * 		(MAX_RT interrupt asserted, i.e. no ack was received and the maximum number of retries were sent), then
+ * 		Radio_Transmit returns RADIO_TX_MAX_RT.
+ */
+uint8_t Radio_Transmit(radiopacket_t* payload, RADIO_TX_WAIT wait);
 
-/** RX2_EN=0, CM=1(ShockBurst), RFDR=1(1 Mbps), XOF=011 (16 MHz crystal), RF_PWR=11 (HIGH) */
-#define MODES        (_BV(6) | _BV(5) | _BV(3) | _BV(2) | _BV(1) | _BV(0))
+/**
+ * Get the next packet from the Rx FIFO.
+ * \param payload If there is a packet to copy out of the Rx FIFO, then its payload will be placed in this structure.
+ * 		If the FIFO is empty, then this structure will be left alone.
+ * \return See enum RADIO_RX_STATUS for values.
+ */
+RADIO_RX_STATUS Radio_Receive(radiopacket_t* buffer);
 
-/** Choose a channel between 101 and 119
- *@n (or 0 to 82, which conflicts with wireless LAN)
- *@n eg. channel 110 == 2400 MHz + 110 MHz = 2510 MHz
-*/
-#define DEFAULT_CHANNEL   0
-#define RXEN         	  1	// defaulted to receive mode
-#define RFCH_RXEN   	  ((DEFAULT_CHANNEL << 1) | RXEN)
+uint8_t Radio_Drop_Rate();
 
-
-/* Port assignments */
-#define DR_PORT         PORTE
-#define CE_PORT         PORTE
-#define CS_PORT         PORTE
-#define CLK1_PORT       PORTE
-#define DATA_PORT       PORTE
-#define DATA_PIN        PINE
-
-/* Port direction */
-#define DR_DDR          DDRE
-#define CE_DDR          DDRE
-#define CS_DDR          DDRE
-#define CLK1_DDR        DDRE
-#define DATA_DDR        DDRE
-
-/* Pin number assignments */
-#define DR_PINNUM        PORTE4
-#define CE_PINNUM        PORTE3
-#define CS_PINNUM        PORTE2
-#define CLK1_PINNUM      PORTE1
-#define DATA_PINNUM      PORTE0
-
-/* Channel Definition */
-#define RADIO_CHANNEL   111      // 2400 MHz + 110 MHz = 2510 MHz
-
-#define TRANSMIT_MODE   0
-#define RECEIVE_MODE    1
-
-/* Pin operations */
-#define CLK1_HIGH()   CLK1_PORT |= _BV(CLK1_PINNUM)
-#define CLK1_LOW()    CLK1_PORT &= ~_BV(CLK1_PINNUM)
-
-#define CE_HIGH()     CE_PORT |= _BV(CE_PINNUM)
-#define CE_LOW()      CE_PORT &= ~_BV(CE_PINNUM)
-
-#define CS_HIGH()     CS_PORT |= _BV(CS_PINNUM)
-#define CS_LOW()      CS_PORT &= ~_BV(CS_PINNUM)
-
-#define DATA_HIGH()   DATA_PORT |= _BV(DATA_PINNUM)
-#define DATA_LOW()    DATA_PORT &= ~_BV(DATA_PINNUM)
-
-/** Buffer to hold message contents. Volatile so accessible outside ISR. */
-extern volatile uint8_t radio_buf[PAYLOAD_BYTES];
-/** Length of buffer holding radio packet. 1 signifies packet received. */
-extern volatile uint8_t packet_available;
-
-/** Routine for initializing the radio. */
-int radio_init(uint16_t address, uint8_t rx_enable);
-
-/** Routine for sending a radio packet. */
-void radio_send(uint16_t const addr, uint8_t * const arr);
-
-/** Routine to switch radio into transmit mode, to send a packet. */
-void radio_set_transmit(void);
-
-/** Routine to switch radio into receive mode. */
-void radio_set_receive(void);
-
-/** Routine to switch radio into standby mode, turning the radio off. */
-void set_standby_mode(void);
-
-/** Get one byte from the radio's buffer. */
-uint8_t radio_get_byte(void);
-
-#endif
+#endif /* RADIO_H_ */

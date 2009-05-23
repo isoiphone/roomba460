@@ -35,7 +35,7 @@ HEX_EEPROM_FLAGS += --change-section-lma .eeprom=0 --no-change-warnings
 
 
 ## Objects that must be built in order to link
-OBJECTS = main.o radio.o uart.o 
+OBJECTS = main.o radio.o spi.o uart.o 
 
 ## Objects explicitly added by the user
 LINKONLYOBJECTS = 
@@ -48,6 +48,9 @@ main.o: ../main.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
 radio.o: ../radio.c
+	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
+
+spi.o: ../spi.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
 uart.o: ../uart.c

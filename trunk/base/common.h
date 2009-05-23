@@ -3,12 +3,6 @@
 
 #define F_CPU 8000000UL  // 8 MHz
 
-// Wireless Radio Addresses
-#define RECEIVE_ADDRESS	0x0042
-#define SEND_ADDRESS	0x0052
-
-// Blinky indicator
-#define LED_D5_RED        0x80
 
 #include <stdbool.h>
 #include <inttypes.h>
