@@ -86,6 +86,37 @@ void radio_rxhandler(uint8_t pipenumber)
 
 uint8_t my_addr[5] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
 uint8_t roomba_addr[5] = { 0xED, 0xB7, 0xED, 0xB7, 0xED};
+const uint16_t TICK_LENGTH_IN_MS = TICK_LENGTH / 1000;
+
+typedef struct
+{
+    uint16_t period;
+    uint16_t time_waited;
+	void (*callback)();
+} task_t;
+
+
+#define NUMBER_OF_TASKS 3
+
+
+void task1()
+{
+	uart_println("1 sec\r\n");
+}
+
+
+void task2()
+{
+	uart_println("5 sec\r\n");
+}
+
+
+void task3()
+{
+	uart_println("10 sec\r\n");
+}
+
+
 
 int main(int argc, char *argv[])
 {
@@ -116,12 +147,53 @@ int main(int argc, char *argv[])
 	// direct messages to roomba
 	Radio_Set_Tx_Addr(roomba_addr);
 
-	uint16_t tick=0;
-	bool flashLed = false;
+	task_t tasks[NUMBER_OF_TASKS];
+	memset(tasks, 0, sizeof(tasks));
+
+	tasks[0].period = 1000;
+	tasks[0].callback = task1;
+
+	tasks[1].period = 5000;
+	tasks[1].callback = task2;
+
+	tasks[2].period = 10000;
+	tasks[2].callback = task3;
+
+	uint16_t previous_ticks = Timer_Now();
 
 	while (1)
 	{
+		uint16_t current_ticks = Timer_Now();
+		uint16_t delta_ticks = current_ticks - previous_ticks;
+		uint16_t delta_time = delta_ticks * TICK_LENGTH_IN_MS;
+
+		previous_ticks = current_ticks;
+
+		int i;
+
+		for (i = 0; i < NUMBER_OF_TASKS; ++i)
+		{
+			tasks[i].time_waited += delta_time;
+
+			if (tasks[i].time_waited >= tasks[i].period)
+			{
+				tasks[i].time_waited -= tasks[i].period;
+				tasks[i].callback();
+			}
+		}
+	}
+
+	return 0;
+}
+
+
+
 /*
+
+	uint16_t tick=0;
+	bool flashLed = false;
+
+
 		//poll_joystick();
 		uart_println("tick: %d\r\n",tick);
 		tick++;
@@ -161,12 +233,4 @@ int main(int argc, char *argv[])
 
 		_delay_160ms();
 */
-		uint16_t time1 = Timer_Now();
-		_delay_ms(160);
-		uint16_t time2 = Timer_Now();
-		
-		uart_println("160ms delaz: %d\r\n",time2 - time1);
-	}
 
-	return 0;
-}

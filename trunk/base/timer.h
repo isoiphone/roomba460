@@ -8,6 +8,10 @@
 #ifndef TIMERDELAY_H_
 #define TIMERDELAY_H_
 
+
+#define TICK_LENGTH 5000	// The number of counter increments between interrupts
+							// (e.g. 1000 ==> interrupt fired every 1 ms, 5000 ==> every 5 ms)
+
 /**
  * Initialize the system timer.
  */
