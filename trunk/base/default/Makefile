@@ -35,7 +35,7 @@ HEX_EEPROM_FLAGS += --change-section-lma .eeprom=0 --no-change-warnings
 
 
 ## Objects that must be built in order to link
-OBJECTS = main.o radio.o spi.o uart.o 
+OBJECTS = main.o radio.o spi.o uart.o timer.o awesomedelay.o 
 
 ## Objects explicitly added by the user
 LINKONLYOBJECTS = 
@@ -54,6 +54,12 @@ spi.o: ../spi.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
 uart.o: ../uart.c
+	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
+
+timer.o: ../timer.c
+	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
+
+awesomedelay.o: ../awesomedelay.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
 ##Link
