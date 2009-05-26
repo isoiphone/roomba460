@@ -8,7 +8,7 @@
 
 volatile task_t tasks[] = {
 	{ task_radio_receive, 100, 0, true },
-	{ task_update_speed_display, 1000, 0, true },
+	{ task_update_speed_display, 1000, 0, false },
 	{ task_drive, 1000, 0, false },
 	{ task_gamepad, 50, 0, false },
 	{ USB_USBTask, 1, 0, false }
@@ -22,8 +22,8 @@ enum { TASK_RADIO_RECEIVE=0,
     NUM_TASKS };
     
 
-const uint8_t my_addr[5] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
-const roomba_addr[5] = { 0xED, 0xB7, 0xED, 0xB7, 0xED};
+uint8_t my_addr[5] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
+uint8_t roomba_addr[5] = { 0xED, 0xB7, 0xED, 0xB7, 0xED};
 
 
 volatile uint8_t rxflag = 0;
@@ -128,7 +128,6 @@ void task_drive(void)
     joystick_to_movement(gamepad_status.x2, gamepad_status.y1, &velocity, &radius);
     
     // debug printing
-	printf_P(PSTR("\r\n"), gamepad_status.y1, );
 	printf_P(PSTR("STICK: (x=%3d,y=%3d), DRIVE: (v=%3d,r=%3d)\r\n"), gamepad_status.x2, gamepad_status.y1, velocity, radius);
 
     // roomba uses different endianness
@@ -163,6 +162,8 @@ void initialize_all(void)
 		// init LUFA LEDs
 		LEDs_Init();
 
+		LEDs_SetAllLEDs(LEDS_LED1);
+
 		// Initialize USB Subsystem
 		USB_Init();
 
@@ -173,7 +174,7 @@ void initialize_all(void)
 
 	_delay_ms(10);
 	puts_P(PSTR("[--- started ---]\r\n"));
-    
+
 	// direct messages to roomba
 	Radio_Set_Tx_Addr(roomba_addr);
 
@@ -210,7 +211,7 @@ void run_event_loop(void)
 			}
 		}
 
-		//_delay_ms(1);
+		_delay_ms(1);
 	}
 }
 
@@ -226,7 +227,7 @@ int main(int argc, char *argv[])
 	_delay_ms(20);
 	send_to_roomba(FULL, 0, 0);
 	_delay_ms(20);
-    
+
 	run_event_loop();
 	return 0;
 }

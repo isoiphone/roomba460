@@ -1,9 +1,8 @@
 #include "joy2mov.h"
 
-
 // map joystick values to VELOCITY
 // generated from python script
-static const int16_t VELOCITY[256] = { 
+const int16_t VELOCITY_TABLE[256] = { 
 +200, +200, +200, +200, +200, +200, +199, +199, +199, +199, +198, +198, +197, +197, +197, +196, 
 +195, +195, +194, +194, +193, +192, +192, +191, +190, +189, +188, +187, +187, +186, +185, +184, 
 +183, +182, +181, +179, +178, +177, +176, +175, +174, +172, +171, +170, +168, +167, +166, +164, 
@@ -24,7 +23,7 @@ static const int16_t VELOCITY[256] = {
     
 // map joystick values to TURN RADIUS
 // generated from python script
-static const int16_t RADIUS[256] = { 
+const int16_t RADIUS_TABLE[256] = { 
    +1,    +1,    +1,    +1,    +1,    +2,    +3,    +4,    +6,    +7,    +9,   +11,   +13,   +15,   +17,   +19, 
   +22,   +24,   +27,   +30,   +33,   +36,   +40,   +43,   +47,   +50,   +54,   +58,   +62,   +66,   +71,   +75, 
   +79,   +84,   +88,   +93,   +98,  +103,  +108,  +112,  +118,  +123,  +128,  +133,  +138,  +144,  +149,  +155, 
@@ -46,11 +45,11 @@ static const int16_t RADIUS[256] = {
 void joystick_to_movement(uint8_t x, uint8_t y, int16_t* velocity, int16_t* radius)
 {
     // use a running average to smooth between sudden changes in joystick position
-    static uint8_t prev_x = x;
-    static uint8_t prev_y = y;
+    static uint8_t prev_x = 128;
+    static uint8_t prev_y = 128;
     
     // get values from lookup rable
-    *velocity = VELOCITY[(y + prev_y)/2];
-    *radius = RADIUS[(x + prev_x)/2];
+    *velocity = VELOCITY_TABLE[(y + prev_y)/2];
+    *radius = RADIUS_TABLE[(x + prev_x)/2];
 }
 
