@@ -1,40 +1,3 @@
-/*
-             LUFA Library
-     Copyright (C) Dean Camera, 2009.
-              
-  dean [at] fourwalledcubicle [dot] com
-      www.fourwalledcubicle.com
-*/
-
-/*
-  Copyright 2009  Dean Camera (dean [at] fourwalledcubicle [dot] com)
-
-  Permission to use, copy, modify, and distribute this software
-  and its documentation for any purpose and without fee is hereby
-  granted, provided that the above copyright notice appear in all
-  copies and that both that the copyright notice and this
-  permission notice and warranty disclaimer appear in supporting
-  documentation, and that the name of the author not be used in
-  advertising or publicity pertaining to distribution of the
-  software without specific, written prior permission.
-
-  The author disclaim all warranties with regard to this
-  software, including all implied warranties of merchantability
-  and fitness.  In no event shall the author be liable for any
-  special, indirect or consequential damages or any damages
-  whatsoever resulting from loss of use, data or profits, whether
-  in an action of contract, negligence or other tortious action,
-  arising out of or in connection with the use or performance of
-  this software.
-*/
-
-/** \file
- *
- *  USB Device Configuration Descriptor processing routines, to determine the correct pipe configurations
- *  needed to communication with an attached USB device. Descriptors are special  computer-readable structures
- *  which the host requests upon device enumeration, to determine the device's capabilities and functions.
- */
-
 #include "ConfigDescriptor.h"
 
 /** Reads and processes an attached device's descriptors, to determine compatibility and pipe configurations. This
@@ -43,7 +6,7 @@
  *
  *  This routine searches for a HID interface descriptor containing at least one Interrupt type IN endpoint.
  *
- *  \return An error code from the MouseHost_GetConfigDescriptorDataCodes_t enum.
+ *  \return An error code from the GamepadHost_GetConfigDescriptorDataCodes_t enum.
  */
 uint8_t ProcessConfigurationDescriptor(void)
 {
@@ -68,16 +31,16 @@ uint8_t ProcessConfigurationDescriptor(void)
 	if (DESCRIPTOR_TYPE(ConfigDescriptorData) != DTYPE_Configuration)
 	  return InvalidConfigDataReturned;
 	
-	/* Get the mouse interface from the configuration descriptor */
-	if (USB_GetNextDescriptorComp(&ConfigDescriptorSize, &ConfigDescriptorData, NextMouseInterface))
+	/* Get the gamepad interface from the configuration descriptor */
+	if (USB_GetNextDescriptorComp(&ConfigDescriptorSize, &ConfigDescriptorData, NextGamepadInterface))
 	{
 		/* Descriptor not found, error out */
 		return NoHIDInterfaceFound;
 	}
 
-	/* Get the mouse interface's data endpoint descriptor */
+	/* Get the gamepad interface's data endpoint descriptor */
 	if (USB_GetNextDescriptorComp(&ConfigDescriptorSize, &ConfigDescriptorData,
-	                              NextInterfaceMouseDataEndpoint))
+	                              NextInterfaceGamepadDataEndpoint))
 	{
 		/* Descriptor not found, error out */
 		return NoEndpointFound;
@@ -86,8 +49,8 @@ uint8_t ProcessConfigurationDescriptor(void)
 	/* Retrieve the endpoint address from the endpoint descriptor */
 	USB_Descriptor_Endpoint_t* EndpointData = DESCRIPTOR_PCAST(ConfigDescriptorData, USB_Descriptor_Endpoint_t);
 
-	/* Configure the mouse data pipe */
-	Pipe_ConfigurePipe(MOUSE_DATAPIPE, EP_TYPE_INTERRUPT, PIPE_TOKEN_IN,
+	/* Configure the gamepad data pipe */
+	Pipe_ConfigurePipe(GAMEPAD_DATAPIPE, EP_TYPE_INTERRUPT, PIPE_TOKEN_IN,
 	                   EndpointData->EndpointAddress, EndpointData->EndpointSize, PIPE_BANK_SINGLE);
 
 	Pipe_SetInfiniteINRequests();
@@ -107,18 +70,18 @@ uint8_t ProcessConfigurationDescriptor(void)
  *  configuration descriptor, to search for a specific sub descriptor. It can also be used to abort the configuration
  *  descriptor processing if an incompatible descriptor configuration is found.
  *
- *  This comparator searches for the next Interface descriptor of the correct Mouse HID Class and Protocol values.
+ *  This comparator searches for the next Interface descriptor of the correct Gamepad HID Class and Protocol values.
  *
  *  \return A value from the DSEARCH_Return_ErrorCodes_t enum
  */
-DESCRIPTOR_COMPARATOR(NextMouseInterface)
+DESCRIPTOR_COMPARATOR(NextGamepadInterface)
 {
 	/* Determine if the current descriptor is an interface descriptor */
 	if (DESCRIPTOR_TYPE(CurrentDescriptor) == DTYPE_Interface)
 	{
 		/* Check the HID descriptor class and protocol, break out if correct class/protocol interface found */
-		if ((DESCRIPTOR_CAST(CurrentDescriptor, USB_Descriptor_Interface_t).Class    == MOUSE_CLASS) &&
-		    (DESCRIPTOR_CAST(CurrentDescriptor, USB_Descriptor_Interface_t).Protocol == MOUSE_PROTOCOL))
+		if ((DESCRIPTOR_CAST(CurrentDescriptor, USB_Descriptor_Interface_t).Class    == GAMEPAD_CLASS) &&
+		    (DESCRIPTOR_CAST(CurrentDescriptor, USB_Descriptor_Interface_t).Protocol == GAMEPAD_PROTOCOL))
 		{
 			/* Indicate that the descriptor being searched for has been found */
 			return DESCRIPTOR_SEARCH_Found;
@@ -138,7 +101,7 @@ DESCRIPTOR_COMPARATOR(NextMouseInterface)
  *
  *  \return A value from the DSEARCH_Return_ErrorCodes_t enum
  */
-DESCRIPTOR_COMPARATOR(NextInterfaceMouseDataEndpoint)
+DESCRIPTOR_COMPARATOR(NextInterfaceGamepadDataEndpoint)
 {
 	/* Determine the type of the current descriptor */
 	if (DESCRIPTOR_TYPE(CurrentDescriptor) == DTYPE_Endpoint)

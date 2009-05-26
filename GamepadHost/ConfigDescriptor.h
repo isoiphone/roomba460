@@ -6,54 +6,27 @@
       www.fourwalledcubicle.com
 */
 
-/*
-  Copyright 2009  Dean Camera (dean [at] fourwalledcubicle [dot] com)
-
-  Permission to use, copy, modify, and distribute this software
-  and its documentation for any purpose and without fee is hereby
-  granted, provided that the above copyright notice appear in all
-  copies and that both that the copyright notice and this
-  permission notice and warranty disclaimer appear in supporting
-  documentation, and that the name of the author not be used in
-  advertising or publicity pertaining to distribution of the
-  software without specific, written prior permission.
-
-  The author disclaim all warranties with regard to this
-  software, including all implied warranties of merchantability
-  and fitness.  In no event shall the author be liable for any
-  special, indirect or consequential damages or any damages
-  whatsoever resulting from loss of use, data or profits, whether
-  in an action of contract, negligence or other tortious action,
-  arising out of or in connection with the use or performance of
-  this software.
-*/
-
-/** \file
- *
- *  Header file for ConfigDescriptor.c.
- */
-
 #ifndef _CONFIGDESCRIPTOR_H_
 #define _CONFIGDESCRIPTOR_H_
 
 	/* Includes: */
 		#include <LUFA/Drivers/USB/USB.h>                        // USB Functionality
 		
-		#include "MouseHost.h"
+		#include "GamepadHost.h"
 		
 	/* Macros: */
 		/** Interface Class value for the Human Interface Device class */
-		#define MOUSE_CLASS                 0x03
+		#define GAMEPAD_CLASS                 0x03
 
-		/** Interface Protocol value for a Boot Protocol Mouse compliant device */
-		#define MOUSE_PROTOCOL              0x00 // 00 for joystick?
+		/** Interface Protocol value for a Boot Protocol Gamepad compliant device */
+		#define GAMEPAD_PROTOCOL              0x00 // 00 for joystick?
 
 		/** Maximum size of a device configuration descriptor which can be processed by the host, in bytes */
 		#define MAX_CONFIG_DESCRIPTOR_SIZE  512
 	
 	/* Enums: */
 		/** Enum for the possible return codes of the ProcessConfigurationDescriptor() function. */
-		enum MouseHost_GetConfigDescriptorDataCodes_t
+		enum GamepadHost_GetConfigDescriptorDataCodes_t
 		{
 			SuccessfulConfigRead            = 0, /**< Configuration Descriptor was processed successfully */
 			ControlError                    = 1, /**< A control request to the device failed to complete successfully */
@@ -64,8 +37,8 @@
 		};	
 
 	/* Configuration Descriptor Comparison Functions: */
-		DESCRIPTOR_COMPARATOR(NextMouseInterface);
-		DESCRIPTOR_COMPARATOR(NextInterfaceMouseDataEndpoint);
+		DESCRIPTOR_COMPARATOR(NextGamepadInterface);
+		DESCRIPTOR_COMPARATOR(NextInterfaceGamepadDataEndpoint);
 
 	/* Function Prototypes: */
 		uint8_t ProcessConfigurationDescriptor(void);	
