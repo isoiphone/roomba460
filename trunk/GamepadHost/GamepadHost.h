@@ -6,35 +6,8 @@
       www.fourwalledcubicle.com
 */
 
-/*
-  Copyright 2009  Dean Camera (dean [at] fourwalledcubicle [dot] com)
-
-  Permission to use, copy, modify, and distribute this software
-  and its documentation for any purpose and without fee is hereby
-  granted, provided that the above copyright notice appear in all
-  copies and that both that the copyright notice and this
-  permission notice and warranty disclaimer appear in supporting
-  documentation, and that the name of the author not be used in
-  advertising or publicity pertaining to distribution of the
-  software without specific, written prior permission.
-
-  The author disclaim all warranties with regard to this
-  software, including all implied warranties of merchantability
-  and fitness.  In no event shall the author be liable for any
-  special, indirect or consequential damages or any damages
-  whatsoever resulting from loss of use, data or profits, whether
-  in an action of contract, negligence or other tortious action,
-  arising out of or in connection with the use or performance of
-  this software.
-*/
-
-/** \file
- *
- *  Header file for MouseHost.c.
- */
-
-#ifndef _MOUSE_HOST_H_
-#define _MOUSE_HOST_H_
+#ifndef _GAMEPAD_HOST_H_
+#define _GAMEPAD_HOST_H_
 
 	/* Includes: */
 		#include <avr/io.h>
@@ -54,14 +27,14 @@
 		#include "ConfigDescriptor.h"
 		
 	/* Macros: */
-		/** Pipe number for the mouse data IN pipe */
-		#define MOUSE_DATAPIPE              1
+		/** Pipe number for the gamepad data IN pipe */
+		#define GAMEPAD_DATAPIPE              1
 		
 		/** HID Class Specific request to set the report protocol mode */
 		#define REQ_SetProtocol             0x0B
 
 	/* Type Defines: */
-		/** Type define for a standard Boot Protocol Mouse report */
+		/** Type define for a standard Boot Protocol Gamepad report */
 		typedef struct
 		{
 		// format based on notes from: http://atariwiki.strotmann.de/xwiki/bin/export/MicroUSB/How+to+write+a+USB+Driver?format=pdf
@@ -78,14 +51,14 @@
 			unsigned : 4;
 
 			uint8_t pad;
-		} USB_MouseReport_Data_t;
+		} USB_GamepadReport_Data_t;
 
 	/* Task Definitions: */
-		TASK(USB_Mouse_Host);
+		TASK(USB_Gamepad_Host);
 
 	/* Enums: */
 		/** Enum for the possible status codes for passing to the UpdateStatus() function. */
-		enum MouseHost_StatusCodes_t
+		enum GamepadHost_StatusCodes_t
 		{
 			Status_USBNotReady      = 0, /**< USB is not ready (disconnected from a USB device) */
 			Status_USBEnumerating   = 1, /**< USB interface is enumerating */

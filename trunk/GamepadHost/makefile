@@ -109,7 +109,7 @@ FORMAT = ihex
 
 
 # Target file name (without extension).
-TARGET = MouseHost
+TARGET = GamepadHost
 
 
 # Object files directory
