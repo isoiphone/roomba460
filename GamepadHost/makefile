@@ -128,6 +128,7 @@ SRC = $(TARGET).c                                                 \
 	  timer.c                                                     \
 	  spi.c                                                       \
 	  radio.c                                                     \
+	  joy2mov.c                                                   \
 	  $(LUFA_PATH)/LUFA/Scheduler/Scheduler.c                     \
 	  $(LUFA_PATH)/LUFA/Drivers/Peripheral/SerialStream.c         \
 	  $(LUFA_PATH)/LUFA/Drivers/Peripheral/Serial.c               \
