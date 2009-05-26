@@ -125,6 +125,9 @@ LUFA_PATH = ../LUFA
 # List C source files here. (C dependencies are automatically generated.)
 SRC = $(TARGET).c                                                 \
 	  ConfigDescriptor.c                                          \
+	  timer.c                                                     \
+	  spi.c                                                       \
+	  radio.c                                                     \
 	  $(LUFA_PATH)/LUFA/Scheduler/Scheduler.c                     \
 	  $(LUFA_PATH)/LUFA/Drivers/Peripheral/SerialStream.c         \
 	  $(LUFA_PATH)/LUFA/Drivers/Peripheral/Serial.c               \
