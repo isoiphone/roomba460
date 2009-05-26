@@ -38,8 +38,8 @@
 		typedef struct
 		{
 		// format based on notes from: http://atariwiki.strotmann.de/xwiki/bin/export/MicroUSB/How+to+write+a+USB+Driver?format=pdf
-			int8_t x1, y1;
-			int8_t x2, y2;
+			uint8_t x1, y1;
+			uint8_t x2, y2;
 
 			unsigned dpad : 4;
 			unsigned button : 10;
