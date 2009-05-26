@@ -9,7 +9,6 @@
 #ifndef _GAMEPAD_HOST_H_
 #define _GAMEPAD_HOST_H_
 
-	/* Includes: */
 		#include <avr/io.h>
 		#include <avr/wdt.h>
 		#include <avr/pgmspace.h>
@@ -26,18 +25,18 @@
 		
 		#include "ConfigDescriptor.h"
 		
-	/* Macros: */
-		/** Pipe number for the gamepad data IN pipe */
+		// Pipe number for the gamepad data IN pipe
 		#define GAMEPAD_DATAPIPE              1
 		
-		/** HID Class Specific request to set the report protocol mode */
+		// HID Class Specific request to set the report protocol mode
 		#define REQ_SetProtocol             0x0B
 
-	/* Type Defines: */
-		/** Type define for a standard Boot Protocol Gamepad report */
+        #define TICK_LENGTH_IN_MS (TICK_LENGTH / 1000)
+        
+        // Logitech Rumblepad 2
+        // format based on notes from: http://atariwiki.strotmann.de/xwiki/bin/export/MicroUSB/How+to+write+a+USB+Driver?format=pdf
 		typedef struct
 		{
-		// format based on notes from: http://atariwiki.strotmann.de/xwiki/bin/export/MicroUSB/How+to+write+a+USB+Driver?format=pdf
 			uint8_t x1, y1;
 			uint8_t x2, y2;
 
@@ -49,16 +48,24 @@
 			uint8_t vib : 1;
 			uint8_t mode : 1;
 			unsigned : 4;
-
+            
 			uint8_t pad;
 		} USB_GamepadReport_Data_t;
 
-	/* Task Definitions: */
+        // Jason-scheduler structure
+        typedef struct
+        {
+            void (*callback)(void);
+            uint16_t period;
+            uint16_t time_waited;
+            bool is_running;
+        } task_t;
+
+        // LUFA Task Definitions:
 		TASK(USB_Gamepad_Host);
 
-	/* Enums: */
-		/** Enum for the possible status codes for passing to the UpdateStatus() function. */
-		enum GamepadHost_StatusCodes_t
+        // For LUFA style status LED display
+		enum MouseHost_StatusCodes_t
 		{
 			Status_USBNotReady      = 0, /**< USB is not ready (disconnected from a USB device) */
 			Status_USBEnumerating   = 1, /**< USB interface is enumerating */
@@ -67,15 +74,20 @@
 			Status_HardwareError    = 4, /**< Hardware error while enumerating the attached USB device */
 		};
 		
-	/* Event Handlers: */
+        // LUFA event handlers
 		HANDLES_EVENT(USB_DeviceAttached);
 		HANDLES_EVENT(USB_DeviceUnattached);
 		HANDLES_EVENT(USB_DeviceEnumerationComplete);
 		HANDLES_EVENT(USB_HostError);
 		HANDLES_EVENT(USB_DeviceEnumerationFailed);
 
-	/* Function Prototypes: */
-		void UpdateStatus(uint8_t CurrentStatus);
-		void ReadNextReport(void);
+        // Prototypes
+		void update_status(uint8_t CurrentStatus);
+		void read_gamepad_report(void);
+        
+        void task_radio_receive(void);
+        void task_update_speed_display(void);
+        void task_drive(void);
+        void task_gamepad(void);
 		
 #endif

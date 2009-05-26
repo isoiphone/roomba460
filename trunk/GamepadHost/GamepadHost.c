@@ -4,26 +4,40 @@
 #include "roomba_sci.h"
 #include "sensor_struct.h"
 #include "timer.h"
+#include "joy2mov.h"
+
+volatile task_t tasks[] = {
+	{ task_radio_receive, 100, 0, true },
+	{ task_update_speed_display, 1000, 0, true },
+	{ task_drive, 1000, 0, false },
+	{ task_gamepad, 50, 0, false },
+	{ USB_USBTask, 1, 0, false }
+};
+
+enum { TASK_RADIO_RECEIVE=0, 
+    TASK_DISPLAY,
+    TASK_DRIVE,
+    TASK_GAMEPAD,
+    TASK_USB,
+    NUM_TASKS };
+    
+
+const uint8_t my_addr[5] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
+const roomba_addr[5] = { 0xED, 0xB7, 0xED, 0xB7, 0xED};
 
 
-#define ARRAY_LENGTH(x) (sizeof(x) / sizeof(*(x)))
-#define TICK_LENGTH_IN_MS (TICK_LENGTH / 1000)
+volatile uint8_t rxflag = 0;
+volatile int16_t prev_distance = 0;
+volatile uint16_t prev_time = 0;
+volatile uint16_t previous_speed_update_ticks = 0;
 
-uint8_t my_addr[5] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
-uint8_t roomba_addr[5] = { 0xED, 0xB7, 0xED, 0xB7, 0xED};
 
-
-typedef struct
-{
-	void (*callback)(void);
-    uint16_t period;
-    uint16_t time_waited;
-	bool is_running;
-} task_t;
+USB_GamepadReport_Data_t gamepad_status;
 
 
 void allow_interupts(bool allow)
 {
+    // FIXME: should really save state, then restore it.
 	if (allow)
 		asm volatile ("sei"::);
 	else
@@ -31,32 +45,21 @@ void allow_interupts(bool allow)
 }
 
 
-// FIXME
 int16_t htons(int16_t value)
 {
-	int16_u input;
-	int16_u output;
-
+	int16_u output,input;
 	input.value = value;
-
 	output.bytes.low_byte = input.bytes.high_byte;
 	output.bytes.high_byte = input.bytes.low_byte;
-
 	return output.value;
 }
 
-
-volatile uint8_t rxflag = 0;
 
 void radio_rxhandler(uint8_t pipenumber)
 {
 	rxflag = 1;
 }
 
-
-volatile int16_t prev_distance = 0;
-volatile uint16_t prev_time = 0;
-volatile uint16_t previous_speed_update_ticks = 0;
 
 void handle_received_radio_packet(radiopacket_t* packet)
 {
@@ -74,13 +77,15 @@ void handle_received_radio_packet(radiopacket_t* packet)
 	}
 }
 
+
 void task_radio_receive(void)
 {
 	while (rxflag)
 	{
 		radiopacket_t packet;
 		memset(&packet, 0, sizeof(packet));
-
+        
+        // read as many packets as we received, we are only interested in the most recent one
 		while (Radio_Receive(&packet) == RADIO_RX_MORE_PACKETS) {}
 		
 		rxflag = 0;
@@ -88,6 +93,7 @@ void task_radio_receive(void)
 		handle_received_radio_packet(&packet);
 	}
 }
+
 
 void task_update_speed_display(void)
 {
@@ -112,68 +118,29 @@ void send_to_roomba(uint8_t command, uint8_t* arguments, uint8_t num_arg_bytes)
 	Radio_Transmit(&packet, RADIO_WAIT_FOR_TX);
 }
 
-USB_GamepadReport_Data_t GamepadReport;
 
 void task_drive(void)
 {
 	uint8_t arguments[4];
 
-#define	DEADZONE	10
+    // map gamepad left and right joysticks positions to roomba values
+    int16_t velocity, radius;
+    joystick_to_movement(gamepad_status.x2, gamepad_status.y1, &velocity, &radius);
+    
+    // debug printing
+	printf_P(PSTR("\r\n"), gamepad_status.y1, );
+	printf_P(PSTR("STICK: (x=%3d,y=%3d), DRIVE: (v=%3d,r=%3d)\r\n"), gamepad_status.x2, gamepad_status.y1, velocity, radius);
 
-	int16_t velocity = 0; // 0 = don't move!
-	if (GamepadReport.y1 < (128-DEADZONE) || GamepadReport.y1 > (128+DEADZONE))
-	{
-		velocity = (int16_t)((255-GamepadReport.y1)*39)/10 - 500; // 0 -> 994, then -500 -> +494 (excluding values in deadzone)
-
-		// velocity -500 -> +500. Positive is forward. Endianness!
-	}
-
-	int16_t radius = htons(32768); // 32768 = straight.
-	if (GamepadReport.x2 < (128-DEADZONE) || GamepadReport.x2 > (128+DEADZONE)) {
-		radius = (int16_t)(GamepadReport.x2*15) - 2000; // 0 -> 3825, then -2000 -> +1825 (excluding values in deadzone)
-
-		// radius -2000 -> +2000. Positive is counter-clockwise.
-		
-	}
-
-	printf_P(PSTR("y1: %d x2: %d\r\n"), GamepadReport.y1, GamepadReport.x2);
-	printf_P(PSTR("DRIVE: %d %d\r\n"), velocity, radius);
-
+    // roomba uses different endianness
 	velocity = htons(velocity);
 	memcpy(&arguments[0], &velocity, 2);
 	radius = htons(radius);
 	memcpy(&arguments[2], &radius, 2);
 
+    // deliver driving packet
 	send_to_roomba(DRIVE, arguments, sizeof(arguments));
 }
 
-void task_gamepad(void);
-
-// FIXME
-volatile task_t tasks[] = {
-	{ task_radio_receive, 100, 0, true },
-	{ task_update_speed_display, 1000, 0, true },
-	{ task_drive, 1000, 0, false },
-	{ task_gamepad, 100, 0, false },
-	{ USB_USBTask, 1, 0, false }
-	
-};
-
-#define TASK_RADIO_RECEIVE 			0
-#define TASK_UPDATE_SPEED_DISPLAY	1
-#define TASK_DRIVE					2
-#define TASK_GAMEPAD				3
-#define TASK_USB					4
-
-void start_task(uint16_t task_number)
-{
-	tasks[task_number].is_running = true;
-}
-
-void stop_task(uint16_t task_number)
-{
-	tasks[task_number].is_running = false;
-}
 
 
 void initialize_all(void)
@@ -202,19 +169,18 @@ void initialize_all(void)
 		Radio_Init();
 		Radio_Configure_Rx(RADIO_PIPE_0, my_addr, ENABLE);
 		Radio_Configure(RADIO_2MBPS, RADIO_HIGHEST_POWER);
-
-		//init_joystick();
 	allow_interupts(true);
 
 	_delay_ms(10);
-	//uart_println("%c[2J", 0x1B); // clear terminal screen
-	puts_P(PSTR("------\r\n"));
-
+	puts_P(PSTR("[--- started ---]\r\n"));
+    
 	// direct messages to roomba
 	Radio_Set_Tx_Addr(roomba_addr);
 
 	previous_speed_update_ticks = Timer_Now();
+	memset(&gamepad_status, 0, sizeof(USB_GamepadReport_Data_t));
 }
+
 
 void run_event_loop(void)
 {
@@ -230,7 +196,7 @@ void run_event_loop(void)
 
 		int i;
 
-		for (i = 0; i < ARRAY_LENGTH(tasks); ++i)
+		for (i = 0; i < NUM_TASKS; ++i)
 		{
 			if (tasks[i].is_running)
 			{
@@ -244,7 +210,7 @@ void run_event_loop(void)
 			}
 		}
 
-		_delay_ms(1);
+		//_delay_ms(1);
 	}
 }
 
@@ -253,21 +219,20 @@ int main(int argc, char *argv[])
 {
 	initialize_all();
 
+    // ensure roomba is in command mode, with full control
 	send_to_roomba(START, 0, 0);
 	_delay_ms(20);
 	send_to_roomba(CONTROL, 0, 0);
 	_delay_ms(20);
 	send_to_roomba(FULL, 0, 0);
 	_delay_ms(20);
-
-	memset(&GamepadReport, 0, sizeof(USB_GamepadReport_Data_t));
-
+    
 	run_event_loop();
 	return 0;
 }
 
 
-void UpdateStatus(uint8_t CurrentStatus)
+void update_status(uint8_t CurrentStatus)
 {
 	uint8_t LEDMask = LEDS_NO_LEDS;
 	
@@ -294,27 +259,31 @@ void UpdateStatus(uint8_t CurrentStatus)
 
 EVENT_HANDLER(USB_DeviceAttached)
 {
-	puts_P(PSTR("Device Attached.\r\n"));
-	UpdateStatus(Status_USBEnumerating);
-	start_task(TASK_USB);
+	puts_P(PSTR("Gamepad attached...\r\n"));
+	update_status(Status_USBEnumerating);
+    
+    tasks[TASK_USB].is_running = true;
 }
 
 EVENT_HANDLER(USB_DeviceUnattached)
 {
-	stop_task(TASK_USB);
-	stop_task(TASK_DRIVE);
-	stop_task(TASK_GAMEPAD);
-
-	puts_P(PSTR("Device Unattached.\r\n"));
-	UpdateStatus(Status_USBNotReady);
+	puts_P(PSTR("Gamepad detached.\r\n"));
+	update_status(Status_USBNotReady);
+    
+    tasks[TASK_USB].is_running = false;
+    tasks[TASK_DRIVE].is_running = false;
+    tasks[TASK_DISPLAY].is_running = false;
+    tasks[TASK_GAMEPAD].is_running = false;
 }
 
 EVENT_HANDLER(USB_DeviceEnumerationComplete)
 {
-	puts_P(PSTR("Enumeration Complete.\r\n"));
-	start_task(TASK_GAMEPAD);
-	start_task(TASK_DRIVE);
-	UpdateStatus(Status_USBReady);
+    puts_P(PSTR("Gamepad OK.\r\n"));
+	update_status(Status_USBReady);
+    
+    tasks[TASK_GAMEPAD].is_running = true;
+    tasks[TASK_DRIVE].is_running = true;
+    tasks[TASK_DISPLAY].is_running = true;
 }
 
 EVENT_HANDLER(USB_HostError)
@@ -325,7 +294,7 @@ EVENT_HANDLER(USB_HostError)
 	printf_P(PSTR(" -- Error Code %d\r\n"), ErrorCode);
 
 	// halt forever
-	UpdateStatus(Status_HardwareError);
+	update_status(Status_HardwareError);
 	for(;;);
 }
 
@@ -336,14 +305,12 @@ EVENT_HANDLER(USB_DeviceEnumerationFailed)
 	printf_P(PSTR(" -- Sub Error Code %d\r\n"), SubErrorCode);
 	printf_P(PSTR(" -- In State %d\r\n"), USB_HostState);
 
-	UpdateStatus(Status_EnumerationError);
+	update_status(Status_EnumerationError);
 }
 
 
-void ReadNextReport(void)
+void read_gamepad_report(void)
 {
-	uint8_t                LEDMask = LEDS_NO_LEDS;
-
 	// Select gamepad data pipe
 	Pipe_SelectPipe(GAMEPAD_DATAPIPE);	
 
@@ -362,26 +329,7 @@ void ReadNextReport(void)
 	if (Pipe_IsReadWriteAllowed())
 	{
 		// Read in gamepad report data
-		Pipe_Read_Stream_LE(&GamepadReport, sizeof(GamepadReport));				
-
-		// Alter status LEDs according to gamepad X movement
-		if (GamepadReport.x1 > 0)
-		  LEDMask |= LEDS_LED1;
-		else if (GamepadReport.x1 < 0)
-		  LEDMask |= LEDS_LED2;
-			
-		// Alter status LEDs according to gamepad Y movement
-		if (GamepadReport.y1 > 0)
-		  LEDMask |= LEDS_LED3;
-		else if (GamepadReport.y1 < 0)
-		  LEDMask |= LEDS_LED4;
-
-		// Alter status LEDs according to gamepad button position
-//		if (GamepadReport.Button)
-//		  LEDMask  = LEDS_ALL_LEDS;
-		
-		LEDs_SetAllLEDs(LEDMask);
-		
+		Pipe_Read_Stream_LE(&gamepad_status, sizeof(gamepad_status));				
 	}
 
 	// Clear the IN endpoint, ready for next data packet
@@ -417,7 +365,7 @@ void task_gamepad(void)
 			if ((ErrorCode = USB_Host_SendControlRequest(NULL)) != HOST_SENDCONTROL_Successful)
 			{
 				// Indicate error status
-				UpdateStatus(Status_EnumerationError);
+				update_status(Status_EnumerationError);
 				
 				// Wait until USB device disconnected
 				while (USB_IsConnected);
@@ -431,7 +379,7 @@ void task_gamepad(void)
 			if ((ErrorCode = ProcessConfigurationDescriptor()) != SuccessfulConfigRead)
 			{
 				// Indicate error status
-				UpdateStatus(Status_EnumerationError);
+				update_status(Status_EnumerationError);
 
 				// Wait until USB device disconnected
 				while (USB_IsConnected);
@@ -455,7 +403,7 @@ void task_gamepad(void)
 			if ((ErrorCode = USB_Host_SendControlRequest(NULL)) != HOST_SENDCONTROL_Successful)
 			{
 				// Indicate error status
-				UpdateStatus(Status_EnumerationError);
+				update_status(Status_EnumerationError);
 				
 				// Wait until USB device disconnected
 				while (USB_IsConnected);
@@ -466,7 +414,7 @@ void task_gamepad(void)
 			break;
 		case HOST_STATE_Ready:
 			// If a report has been received, read and process it
-			ReadNextReport();
+			read_gamepad_report();
 
 			break;
 	}
