@@ -9,7 +9,7 @@
 volatile task_t tasks[] = {
 	{ task_radio_receive, 100, 0, true },
 	{ task_update_speed_display, 1000, 0, false },
-	{ task_drive, 1000, 0, false },
+	{ task_drive, 300, 0, false },
 	{ task_gamepad, 50, 0, false },
 	{ USB_USBTask, 1, 0, false }
 };
