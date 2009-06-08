@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="eng" xml:lang="eng">
+<head>
+<title>CSC 460: Report 2 - C Runtime</title>
+<style type="text/css">@import url(report2.css);</style>
+</head>
+<body>
+
+<div id="container">
+
+<div id="top">Scott Craig and Justin Tanner</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a class="current" href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+<div id="content">
+
+<h1>The C Runtime</h1>
+
+<p>(We provide two custom C runtime files: <code>crt0.S</code> written in assembler; and <code>crt0.c</code>
+written in C. A description of <code>crt0.S</code> follows.)</p>
+
+<p>crt stands for C runtime. <code>crt0.o</code> is an object file with code that is prepended to object
+code supplied by the user to make an executable. It initializes variables and the stack,
+and starts the user's program, among other things.</p>
+
+<h2>Modification</h2>
+
+<p>We need  to modify the runtime to behave differently than the usual way. We want
+to start executing our code at the function <code>OS_Init()</code> rather than <code>main()</code>.
+</p>
+
+<p>(Note: prior to gcc 4.x, <code>main()</code> was treated differently from other functions. If you want to also include a function called <code>main()</code>, then use a WinAVR release at least 20070525.)</p>
+
+<p>An overall skeleton of our crt0.S file is shown below.
+
+<pre class="code">
+<span class="construct">#include</span> &lt;avr/io.h&gt;
+<span class="construct">#include</span> &lt;avr/sfr_defs.h&gt;
+
+#define __zero_reg__ r1
+
+   .macro       vector name
+   .weak        \name
+   .set         \name, __vector_not_set
+   jmp          \name
+   .endm
+
+   <span class="comment">/* initialize the interrupt vector table */</span>
+   <span class="comment">/* vector 0 is the "reset" vector */</span>
+   .section .vectors,"ax",@progbits
+   .global      __vectors
+   .func        __vectors
+__vectors:
+   jmp          __init
+   vector       __vector_1
+   vector       __vector_2
+   vector       __vector_3
+        ...
+   vector       __vector_37
+   .endfunc
+
+   .text
+   .global      __vector_not_set
+   .func        __vector_not_set
+__vector_not_set:
+   jmp          vectors
+   .endfunc
+
+   <span class="comment">/* beginning of our executable code */</span>
+   .section .init0,"ax",@progbits
+   .weak        __init
+__init:
+   .weak        __stack
+   .weak        __heap_end
+   .set         __heap_end, 0
+   .set         __stack, RAMEND
+
+   <span class="comment">/* initialize a default stack at the end of RAM */</span>
+   .section .init2,"ax",@progbits
+   clr          __zero_reg__
+   out          _SFR_IO_ADDR(SREG), __zero_reg__
+   ldi          r28,lo8(__stack)
+   ldi          r29,hi8(__stack)
+   out         _SFR_IO_ADDR(SPH), r29
+   out         _SFR_IO_ADDR(SPL), r28
+
+   <span class="comment">/* copy initial global data values from FLASH into RAM */</span>
+   .section .init4,"ax",@progbits
+   .global __do_copy_data
+__do_copy_data:
+   ldi         r17, hi8(__data_end)
+   ldi         r26, lo8(__data_start)
+   ldi         r27, hi8(__data_start)
+   ldi         r30, lo8(__data_load_start)
+   ldi         r31, hi8(__data_load_start)
+   ldi         r16, hh8(__data_load_start)
+   out         _SFR_IO_ADDR(RAMPZ), r16
+   rjmp       .L__do_copy_data_start
+.L__do_copy_data_loop:
+   elpm       r0, Z+
+   st         X+, r0
+.L__do_copy_data_start:
+   cpi        r26, lo8(__data_end)
+   cpc        r27, r17
+   brne       .L__do_copy_data_loop
+
+   <span class="comment">/* now, we are ready to call our application's main program */</span>
+   .section .init9,"ax",@progbits
+   call       OS_Init       <span class="comment">/* changed "main" to "OS_Init" */</span>
+   jmp        exit          <span class="comment">/* if returns, loop forever */</span>
+</pre>
+
+<p>To use this modified crt0.S file instead of the default file in AVR Studio, add a linker option in Project>>Configuration Options>>Custom Options. Highlight "[Linker Options]" and enter "-nostartfiles" in the box beside the Add button. Press Add.</p>
+
+<h2>Default Linker Script</h2>
+
+<p>
+An explanation of how this <code>crt0.S</code> file is linked to our application's executable follows.
+</p>
+
+<p>
+The gnu linker, ld, is invoked directly, or by executing gcc on object files. AVR Studio arranges for
+ld to read an appropriate linker script for the device, for example,
+<a href="avr5.x">WinAVR/avr/lib/ldscripts/avr5.x</a>. This file describes
+the memory of the device, and gives the layout of the order in which the linker should place object
+code. It contains a list of "sections", some of which are allowed to be empty. The important sections
+for us are:</p>
+<ul>
+<li><code>.text</code> ---application's executable code, including our RTOS
+(note: for AVR microcontroller chips, this is stored in FLASH),</li>
+<li><code>.data</code> ---all globally declared variables that have an initializer
+(note: they are stored in RAM but their values are stored in FLASH), and</li>
+<li><code>.bss</code> ---all globally declared variables but without an initializer
+(note: they are stored in RAM but should all be cleared to zero by default).</li>
+</ul>
+
+<p>
+The <code>.text</code> section contains labels to where code thus labeled will go. An abridged version of the <code>.text</code> section of avr5.x is:</p>
+
+<pre class="code">
+    *(.vectors)
+    *(.init0)  /* Start here after reset.  */
+    *(.init1)
+    *(.init2)  /* Clear __zero_reg__, set up stack pointer.  */
+    *(.init3)
+    *(.init4)  /* Initialize data and BSS.  */
+    ...
+    *(.init9)  /* Call main().  */
+    *(.text)
+    *(.fini9)  /* _exit() starts here.  */
+    ...
+    *(.fini0)  /* Infinite loop after program termination.  */
+</pre>
+
+<p>
+The asterisks indicate the sections may be empty. We need a <code>.vectors</code> section to indicate
+where the interrupt service routines reside; some initialization sections,
+<code>.init0</code> to <code>.init9</code> ; a section for most code, called <code>.text</code>; and
+some finalization sections, <code>.fini9</code>  down to <code>.fini0</code> .</p>
+
+<p>
+The .data and .bss sections come next. The .data section contains the initialization values for variables declared with initializers in the C code. The .bss section is for uninitialized variables.</p>
+
+<pre>
+  .data     : AT (ADDR (.text) + SIZEOF (.text))
+  {
+     PROVIDE (__data_start = .) ;
+    *(.data)
+    *(.gnu.linkonce.d*)
+    . = ALIGN(2);
+     _edata = . ;
+     PROVIDE (__data_end = .) ;
+  }  > data
+  .bss  SIZEOF(.data) + ADDR(.data) :
+  {
+     PROVIDE (__bss_start = .) ;
+    *(.bss)
+    *(COMMON)
+     PROVIDE (__bss_end = .) ;
+  }  > data
+   __data_load_start = LOADADDR(.data);
+   __data_load_end = __data_load_start + SIZEOF(.data);
+</pre>
+
+<p>
+After the data from the various object files are arranged in these sections, the linker creates the symbols
+<code>__data_start</code>, etc., by setting them equal to the address at which the symbol appears in the
+layout via a statement such as <code>__data_start = .</code>, or with an arithmetic assignment.
+These six symbols are available for the object files to use. (We use them in our <code>crt0.S</code>.)</p>
+
+<p>Normally, the linker looks to find the necessary initialization functions in an object file
+relevant to the hardware, such as in <code>WinAVR/avr/lib/avr5/crtusb1287.o</code>.
+This file is compiled from
+<a href="gcrt1.S"><code>avr-libc/crt1/gcrt1.S</code></a> with the appropriate <code>#define</code>s set
+by the linker. This file needs <code>#define</code>s included in
+<a href="macros.inc"><code>avr-libc/common/macros.inc</code></a> and
+<a href="common.h"><code>avr-libc/include/avr/common.h</code></a>. Our custom <code>crt0.S</code> was created by modifying these files.</p>
+
+<p>The linker also looks in libgcc.a for some initialization code in the gcc compiler's libgcc.a. Here reside default implementations of the routines:</p>
+
+<ul>
+<li><code>__do_copy_data</code> for copying the initial values of the variables from the program memory into RAM,</li>
+<li><code>__do_clear_bss</code> for setting the uninitialized variables in RAM to 0, and</li>
+<li><code>_exit</code> which is just an infinite loop to itself.</li>
+</ul>
+
+<p>The version of <code>__do_copy_data</code> given in <a href="libgcc.S"><code>libgcc.S</code></a> is the one for the 64 K Flash
+versions of avr chips. This routine needs to be overridden for chips with 128 K of flash,
+such as the AT90USB1287. There is another version of this routine in <code>gcrt1.S</code>, which needs
+to be duplicated in <code>crt0.S</code>. The routine makes use of the locations in memory of the data
+provided by the linker from the load script.</p>
+
+<p><code>crt0.S</code> also needs a routine to initialize the stack pointer, and to initialize the "zero register."
+The gcc compiler requires the second register, <code>r1</code>, to be 0, in order to speed up some
+machine instructions. These are provided in <code>gcrt1.S</code>, and so in the modified <code>crt0.S</code>.</p>
+
+<p><code>__do_clear_bss</code> and<code> _exit</code> are fine as they are in <code>libgcc.o</code>.</p>
+
+<p>All these routines are placed in the correct sections by virtue of a section declaration such as
+<code>.section .init4,"ax",@progbits</code> above the routine in the assembler file. It is also possible
+to place compiled C code in particular sections other than <code>.text</code>. See
+<a href="http://www.nongnu.org/avr-libc/user-manual/mem_sections.html">
+http://www.nongnu.org/avr-libc/user-manual/mem_sections.html</a> for a discussion.
+(This is what we do in <code>crt0.c</code>.)
+
+
+</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a class="current" href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+
+</div>
+</body>
+</html>

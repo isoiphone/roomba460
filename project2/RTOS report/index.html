@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="eng" xml:lang="eng">
+<head>
+<title>CSC 460: Report 2 - A Realtime OS</title>
+<style type="text/css">@import url(report2.css);</style>
+</head>
+<body>
+
+<div id="container">
+
+<div id="top">Scott Craig and Justin Tanner</div>
+
+<div id="menu">
+<ul>
+    <li><a class="current" href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+<div id="content">
+  <h1>A Real Time Operating System</h1>
+
+  <p>As a requirement for the course CSC 460, we implemented an RTOS to meet the specification
+  provided to us by the course instructor, Mantis Cheng. It has a novel design to provide a framework
+  for periodic functions on a micro-controller.
+
+  <h2>Real Time</h2>
+
+    <div class="float_right"><img src="images/board.jpg" border="0" alt="at90board" /></div>
+  <p>Historically, the term "real-time" referred to a type of simulation of a real-world system on a computer.
+  The term implied that the simulation ran at the same rate as the physical system. Now the term has come to
+  refer to systems that respond to stimuli within strict deadlines; a late response is as bad as an incorrect
+  response. Technically speaking, a late response <em>is</em> an incorrect response in real-time computing.
+  Typical applications are in embedded systems, such as medical systems, industrial controllers, or
+  automotive controllers, such as for controlling aspects of the engine or anti-lock brakes.</p>
+
+
+  <p>There are thousands of real-time operating systems available, many of them free or open-source.
+  But the devices they run on are simple enough that many programmers write their own custom OS for the
+  application at hand. Most of these systems use priority-based pre-emptive scheduling, to minimize the response
+  time for the most important stimuli.</p>
+
+  <h2>Our RTOS</h2>
+
+  <p>Our RTOS is designed for a different purpose than most other RTOSes, mainly to support periodic tasks as its
+  primary feature. The goal is to provide
+  an easy way to interleave many periodic tasks, guaranteeing limits on <em>jitter</em> in the operation of
+  each task at its specified frequency. That is, tasks that are specified to be periodic include frequency of
+  of execution and a deadline for each cycle in the specification. The application designer must arrange
+  the tasks to meet these goals in advance, before even compiling the system.</p>
+
+  <p>The application designer specifies a <em>Gantt chart</em> for the periodic tasks, which is a schedule of
+  when and how long to run each of the tasks. Any unallocated time would be available to non-periodic tasks
+  in the system. A tool that automates this process would be useful, but we don't include one.</p>
+
+  <p>Our RTOS also supports priority-based scheduling in a limited way. Background tasks, with the lowest priority
+  are scheduled round-robin, interrupted at a specific time interval. High-priority system tasks pre-empt the
+  background tasks and even the periodic tasks. They are scheduled "first come, first served" and run to completion.</p>
+
+<h2>Target Hardware</h2>
+  <p>The RTOS is written in C, and intended to be used on an
+  <a href="http://www.atmel.com/">Atmel</a>
+  <a href="http://www.atmel.com/dyn/products/tools_card.asp?tool_id=3879">AT90USB Key</a>. The Key
+  is a demonstration board which incorporates the Atmel AT90USB1287, some serial dataflash, some LEDs, and
+  a 4+1 ways joystick. The RTOS could be easily adapted to run on other Atmel 8-bit RISC micro-controllers.</p>
+
+  <p>Software used to develop the RTOS included the Atmel AVR Studio integrated development environment,
+  which includes a simulator for the target processor, and Atmel Flip, which is an application that runs
+  on a Microsoft Windows PC to load executable code to the Key via a USB connection.</p>
+</div>
+
+<div id="menu">
+<ul>
+    <li><a class="current" href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+</div>
+</body>
+</html>

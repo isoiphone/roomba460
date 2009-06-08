@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="eng" xml:lang="eng">
+<head>
+<title>CSC 460: Report 2 - Design</title>
+<style type="text/css">@import url(report2.css);</style>
+</head>
+<body>
+
+<div id="container">
+
+<div id="top">Scott Craig and Justin Tanner</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a class="current" href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+<div id="content">
+  <h1>Design</h1>
+
+  <p>In the design for our RTOS we incorporated ideas from multiple different sources: online examples, other students reports and other real-time operating systems.  These are the decisions we made during the development of the RTOS.</p>
+  
+  <h2>Active Kernel vs Shared Library Kernel</h2>
+
+  <p>We were given code using two different approaches to examine. The "active" kernel version
+  uses a separate stack for the kernel, namely the original stack at the end of SRAM.
+  Each task has its own stack allocated in an array in the data section near the top of SRAM.
+  In the "shared library" kernel version, the kernel uses the stack of the current task.</p>
+
+  <p>The advantage of the "shared" approach is the response time of the kernel to a system call.
+  Rather than having to spend time restoring a kernel "context," the kernel operates outside
+  any context. The disadvantage of this approach is that the stacks of the individual tasks must be
+  large enough to accommodate the kernel. Also, the scheduling becomes more complicated; each
+  system call must select the next task to run.</p>
+
+  <p>We didn't attempt the shared library approach. Instead, we chose the active kernel approach.</p>
+
+  <h2>Task and Kernel Context</h2>
+  <p>In abstract terms, a task in a multi-tasking system consists of two parts:
+  <em>code</em> and <em>context</em>.</p>
+
+  <p>The code is the sequence of machine instructions that are executed by the processor when the
+  task is "running." The context is the description of the state of the processor (not including memory)
+  between the execution of instructions.</p>
+
+  <p>From the point of view of a task, it alone controls the entire processor. So when an interrupt occurs
+  to switch out the task, the processor's state must be recorded somewhere so that it can be restored when the task
+  is resumed.
+  </p>
+
+  <p>There are only a few registers that describe the processor's state:</p>
+  <ul>
+    <li>PC - the program counter register,</li>
+    <li>SP - the stack pointer register,</li>
+    <li>SREG - the status register, whose bits indicate the results of the last instruction executed and whether interrupts are enabled</li>
+    <li>r0 to r31 the general purpose I/O registers</li>
+  </ul>
+  <p>These are the items to be saved during a <em>context switch</em>.</p>
+
+  <p>We chose to follow the sample code and save:</p>
+
+  <ul>
+    <li>the program counter, PC, on the stack with a call instruction</li>
+    <li>the 32 I/O registers, r0 to r31, on the stack</li>
+    <li>the status register, SREG, on the stack</li>
+    <li>the stack pointer, SP, in a variable</li>
+  </ul>
+
+  <p>See the <a href="context_switch.html">context switching</a> page. We could have chosen some other location,
+  such as individual variables for each item for each task for example. But the assembly instructions
+  for pushing and popping the stack are quite fast. Also, historically,
+  many CISC processors have an instruction that saves the context on the stack, although
+  RISC processors such the AT90 do not. We followed tradition and used the stack.</p>
+
+  <p>The stack for each task lies within an array defined inside a struct, called a task descriptor,
+     which collects all the data pertaining to the task. All of the task descriptors lie in an array
+     of these structs. Since we know the maximum number of tasks at compile-time, all this data is
+     statically defined, and fixed before the application is run.</p>
+
+  <p>Another option, which we rejected, is to dynamically allocate storage for tasks as they are created
+  with calls to <code>malloc()</code>. This is never a good idea in an embedded system.
+  With its limited resources, an embedded system couldn't practically implement virtual
+  memory or swap space nor any other mechanism used by larger operating systems to abstract the physical
+  memory. More importantly, for a real-time system, we value the predictability of the response time
+  when creating a task. </p>
+
+  <h2>Queues as Linked Lists</h2>
+
+  <p>Because the design of the OS in the <code>os.h</code> file provided to us, the natural data structure to employ
+  for scheduling tasks is a set of singly-linked lists. For each of the queues we need:</p>
+  <ul>
+  <li>RR task ready queue, scheduled round-robin</li>
+  <li>SYSTEM task ready queue, scheduled first-come, first-served</li>
+  <li>queues of blocked tasks waiting for a signal</li>
+  <li>the dead pool of empty task descriptors</li>
+  </ul>
+  <p>Tasks always enter at one end of the queue, and leave from the other. Minor modifications to the OS
+  design would change this. For example, if one task could cause some other task to terminate, then
+  the killed task might have to be removed from the middle of a queue.</p>
+
+  <p>For the elements of the lists, we chose to use the task descriptors themselves. We merely added
+  a pointer variable inside the struct to point to the next task in whichever queue the task is in at the moment.
+  The lists are accessed with pointers to the head and tail via <code>queue()</code> and <code>dequeue()</code>
+  functions.</p>
+
+
+  <h2>System Calls</h2>
+
+  <p>We wanted the kernel to respond to one system call at a time. So each of the public system calls
+  first disables interrupts before setting a variable to indicate the nature of the call, then causes
+  the processor to switch to the kernel's context. Because interrupts are disabled, no interrupt
+  service routine, or ISR, can overwrite that variable before the kernel reads it. So there only needs
+  to be one copy of a variable to hold the current request to the kernel. By the same reasoning, there
+  need be only one copy of the arguments and return values needed for the various calls.</p>
+
+  <h2>OS Idling</h2>
+
+  <p>When there is no task to run, the processor still must do something as the timers tick.
+  But in what context should the processor run?</p>
+
+  <p>The two choices we considered were the kernel context, and a separate "idle task" context.
+  The advantage of using the kernel context is that when an interrupt does occur that has an interrupt
+  service routine that causes some task to become ready to run, the kernel can respond much more quickly.
+  If the processor is idling in a useless task, then the processor must spend time switching out of that
+  context and into the kernel's. As well, the idle task will need its own stack which consumes memory.
+  In the first choice, the processor idles using the kernel's stack.</p>
+
+  <p>But ultimately, we chose the second option. The reason is that the OS specification does not stipulate
+  if or how ISRs can make system calls, and there is no way to tell if a call came from inside one.
+  In order to use the option of idling within the kernel, we need to specify certain rules for system
+  calls within ISRs. For example, only allow signals or broadcasts on events, and then only once as the last
+  statement of the ISR.</p>
+
+  <h2>ISRs and System Calls</h2>
+
+  <p>Because there are no restrictions on interrupt service routines calling system calls, we implicitly
+  allow them. But then we have to decide the semantics of the calls. Specifically, in which context,
+  and on whose behalf, is the call being made?</p>
+
+  <p>One answer is that the ISR is operating outside of every task. This is the usual notion of ISR such
+  as used in device drivers on other systems, for example. The system is responding to stimuli that
+  are independent of the task. But these ISRs do not normally make system calls.</p>
+
+  <p>Since we implicitly allow all system calls, it makes sense to consider that an ISR makes a system
+  call on behalf of the currently running task. This makes no difference for <code>Task_Create()</code>
+  or <code>Event_Signal()</code>, but <code>Event_Wait()</code> or <code>Task_Terminate()</code> have a
+  profound effect on the current task. And we could envision application designers using ISRs in this way.
+  For example, system level task scheduling could be changed to be round-robin by creating an ISR that
+  periodically calls <code>Task_Next()</code>. Or an ISR could kill random tasks by calling
+  <code>Task_Terminate()</code>, or make them wait with <code>Event_Wait()</code>.</p>
+
+  <p>As well, an ISR might make two system calls, such as signaling on an event exactly twice.
+  In this case we need someplace for the first system call to return to. If some task is running,
+  then the solution is apparent: use the current task's context to save the state.</p>
+
+  <p>But if no task is running and the OS is idling, we can't use the same solution if the idling
+  is occurring in the kernel's own context. With the restrictions suggested above, we could just
+  forget the rest of the ISR and never return to it without any problem. But since we do allow
+  unconventional ISRs, the only solution we could find is to use an idle task and give it its own context
+  and stack space.</p>
+
+  <h2>Event Handles</h2>
+
+  <p>In the <code>os.h</code> file, <code>Event_Init()</code> conveniently returns a pointer to a struct.
+  The intention seems to make it easy to access the event's waiting queues in the other Event system calls.
+  But it is generally a dangerous practice to allow tasks to access internal kernel variables.
+  What would happen if the user task signaled with a pointer that didn't actually point to such a structure?
+  How could the kernel code check?</p>
+
+  <p>Since we are forced to used pointers to structs, but don't want to, we employ a simple subterfuge.
+  The "pointers" referred to in the Event system calls are merely integers cast as pointers, with
+  values from 0 to <code>num_events_created - 1</code>. Then it becomes easy to check if the pointer is valid;
+  simply cast it to an integer and check if it is in the right range.</p>
+
+  <p>This technique is generally known as using <em>handles</em> to objects, where the handle must be converted
+  into a pointer inside the private code. It takes a few extra steps to do this, but the code eliminates many
+  hard-to-find errors.</p>
+
+</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a class="current" href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+</div>
+</body>
+</html>
