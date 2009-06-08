@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="eng" xml:lang="eng">
+<head>
+<title>CSC 460: Report 2 - Why one file?</title>
+<style type="text/css">@import url(report2.css);</style>
+</head>
+<body>
+
+<div id="container">
+
+<div id="top">Scott Craig and Justin Tanner</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a class="current" href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+<div id="content">
+<h1>Why is the RTOS in a single file?</h1>
+
+<p>Usually, in large projects, the code is separated into small compilation units. Then, with
+a suitable Makefile, only changed portions need to be re-compiled and linked. On very large projects
+this practice saves much time.</p>
+
+<p>Breaking the project into several files also embodies the principle of encapsulation. Variables and
+functions can be local to a file, and won't conflict with similarly named variables and functions in
+other files.</p>
+
+<p>From a maintenance point of view, smaller files are easier to deal with. It is much easier to find
+items in an editor, and programmers can work on separate files simultaneously.</p>
+
+<p>So why do we choose to have virtually all of our OS code in a single file?</p>
+
+<p>To answer this, we need to compare our OS to other operating systems, and consider the
+<em>extent</em> and <em>linkage</em> of names of variables and functions.</p>
+
+<h2>Other Operating Systems</h2>
+
+<p>In an operating system such as Windows or Unix, the kernel operates in its
+own protected address and name space; a process (task) exists in a self contained
+executable file, which is compiled and linked independently of the operating system.</p>
+
+<p>But in our OS, the kernel and application code are compiled and linked together. They
+share the same address space and symbol table. This will require special handling.</p>
+
+<h2>Linkage</h2>
+
+<p>If our OS was separated into more than one file, and these pieces need to communicate, then
+they will likely need to share a variable between them. This is accomplished by defining the variable
+to have external linkage. In C, this is accomplished by defining the variable in one of the files at the top level,
+such as with <code>int x;</code>, and declaring
+the same variable in the other file with an <code>extern</code> storage class specifier, as <code>extern int x;</code>.
+The linker will provide storage for <code>x</code> only once, but will reference this same storage in both files.</p>
+
+<p>To prevent a top-level variable or function name being exported to the linker, the name needs to be prefixed with
+a <code>static</code> storage class specifier, as the default linkage is <code>extern</code> when none is specified.
+Statically declared variables have extent throughout the file, but won't conflict with
+variables in other files.</p>
+
+<h2>Single File</h2>
+
+<p>We want to provide the application writer who uses our OS with the flexibility to choose any names and storage
+specifiers he wants for variables and functions, except for the system calls declared in <code>os.h</code>. To avoid
+conflicts, we could choose obscurity, and choose long names for our global names that the user is unlikely to
+use himself. But that only reduces the probability of name collision. The only way C allows to achieve complete
+separation is to declare all our private globals as <code>static</code>. Necessarily, any function that references
+these variables must be in the same file. Since the variable <code>cur_task</code> is referenced by virtually all of our
+functions, we must put almost all the functions in the file with its definition.</p>
+
+<p>We apologize to any readers who find the code difficult to navigate. We tried to help by organizing the
+contents of the file systematically. All the variables are at the top, all the public functions are at the end,
+and helper functions are placed near to the function they help.</p>
+
+<h2>Get Naked</h2>
+
+<p>The "single-file" design decision even necessitated re-writing the context switching
+code that was provided to us.
+The provided file was written in assembly code, but the names of the functions in the file had to be
+accessible to the rest of our kernel, which was written in C. In order to declare these functions as
+<code>static</code>, they had to be in the same file. Rather than write the kernel in assembler,
+we wrote the context switching code in C.</p>
+
+<p>Mostly, that involved liberal use of the
+<code>asm()</code> macro used by gcc to insert assembly statements into C programs. But there was another
+problem to overcome which was caused with the way gcc translates function calls into assembly instructions.</p>
+
+<p>By convention in gcc, general purpose registers are either <em>caller-saved</em> or
+<em>callee-saved</em>. That is, the responsibility for saving values in registers to make sure
+the values are not <em>clobbered</em> is divided. The reason for this is to prevent unnecessary
+saving. Most functions only use a few of the registers. It would be wasteful to spend time saving
+extra unused data.</p>
+
+<p>In gcc, as in most compilers, any callee-saved register that is modified by the function will be saved at the
+start of the function by pushing its contents onto the stack. gcc calculates which registers are used
+and inserts instructions at the beginning of the function code to do the pushes. Similar instructions
+are inserted before the return statement to pop the stack and restore the register values.</p>
+
+<p>But our context switching code relies on manipulating the stack. We can't allow an unknown number
+of registers being pushed on top of the return address. We need to know exactly where that address
+is in the stack. The solution to prevent this behavior is to use the function attribute
+<code>naked</code> in the function declaration, as in</p>
+
+<pre class="code">
+<span class="type">static void</span> <span class="ident">enter_kernel</span>(<span class="construct">void</span>) __attribute((<span class="type">naked</span>));
+</pre>
+
+<p>This attribute directs the compiler to forego saving registers. As we save all the registers anyway
+in these functions, this does not cause any problems. The other thing the <code>naked</code> attribute
+prevents is the automatic insertion of a return statement, so we have to call it explicitly.
+See the context switching code in <code>os.c</code> for details.</p>
+
+
+</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a class="current" href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+</div>
+</body>
+</html>

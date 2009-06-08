@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="eng" xml:lang="eng">
+<head>
+<title>CSC 460: Report 2 - Volatile Storage</title>
+<style type="text/css">@import url(report2.css);</style>
+</head>
+<body>
+
+<div id="container">
+
+<div id="top">Scott Craig and Justin Tanner</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a class="current" href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+<div id="content">
+<h1>The volatile Type Qualifier</h1>
+
+<p>During development of the RTOS we ran into a nasty bug.  When we chose an optimization
+option in the gcc compiler such as <code>-O2</code>, our OS behaved differently than when
+compiled without optimization. Upon closer inspection we found that certain C statements were ignored.</p>
+
+<h2>The Problem</h2>
+
+<p>To illustrate this problem imagine we have a sensor that takes 50ms to read.
+Code to read this sensor might look like this:</p>
+
+<pre class="code">
+<span class="type">int</span> <span class="ident">finished_reading</span> = 0;
+
+<span class="type">void</span> <span class="ident">main</span>(void)
+{
+    <span class="ident">init_sensor</span>();
+
+    <span class="construct">for</span>(;;)
+    {
+        <span class="ident">finished_reading</span> = 0;
+        <span class="ident">read_sensor</span>();
+
+        <span class="construct">while</span>(<span class="ident">finished_reading</span> == 0) {};
+    }
+}
+
+
+<span class="ident">ISR</span>()
+{
+    <span class="comment">/* read the sensor value */</span>
+    <span class="ident">finished_reading</span> = 1;
+}
+</pre>
+
+<p>The expected behavior of this code inside the <code>for(;;)</code> loop is as follows,</p>
+
+<ol>
+    <li>call <code>read_sensor()</code> and enter <code>while()</code> loop</li>
+    <li>ISR fires, gets the sensor value, and sets <code>finished_reading</code> to 1</li>
+    <li>the <code>while()</code> loop exits</li>
+    <li>go back to step one</li>    
+</ol>
+
+<p>But the optimization of this code causes a problem: step 3 never occurs.  The ISR executes as expected, but the value of <code>finished_reading</code> never gets set to 1.</p>
+
+<h2>Upon Closer Inspection</h2>
+
+<p>To see what is going on we must go down to the assembly level.</p>
+
+<p><b>C code</b></p>
+
+<pre class="code">
+<span class="construct">while</span>(<span class="ident">finished_reading</span> == 0) {};
+</pre>
+
+<p><b>AVR RISC assembler</b></p>
+
+<pre class="code">
++000004A8:   9180010B    <span class="construct">LDS</span>     R24,0x010B    <span class="comment">Load direct from data space</span>
++000004AA:   2388        <span class="construct">TST</span>     R24           <span class="comment">Test for Zero or Minus</span>
++000004AB:   F4A9        <span class="construct">BRNE</span>    PC-0x01       <span class="comment">Branch if not equal</span>
+</pre>
+
+<p>The first line of assembly gets finished_reading from memory and places it in register 24.  The next instruction tests if the value in register 24 is zero.  And the last instruction branches back to the previous instruction.</p>
+
+<p>But a problem lies in the last line of assembler.
+We want the instruction to branch back to the top of the loop.
+ Since GCC thinks the value of finished_reading will never change it jumps back
+to the second instruction, not the first.
+The last instruction should read <code>BRNE PC-0x0<b>3</b></code>, not <code>BRNE PC-0x01</code>.</p>
+
+<p>From the compilers perspective the value of finished_reading is set once in main() and never changed.  The behavior of the ISR() and how it interacts with the globals used in main() is completely unknown to the compiler.  So it is making the right optimization, saving 2 cpu cycles for each loop iteration.</p>
+
+<h2>The Solution</h2>
+
+<p>The solution to this problem is to change the definition of finished_reading to be volatile.</p>
+
+<pre class="code">
+<span class="type">int <b>volatile</b></span> <span class="ident">finished_reading</span>;
+</pre>
+
+<p>This will change the third instruction to read BRNE PC-0x03, getting a fresh value of finished_reading from its location in memory.</p>
+
+<h2>How does volatile work?</h2>
+
+<p>A variable declared with a type qualifier <code>volatile</code>, informs the compiler not to optimize references to or modifications of the variable across <em>sequence points</em>, such as the end of statements or expressions in a test.
+In practice,  declaring a variable with the <code>volatile</code> qualifier forces the compiler to produce machine instructions that read or write directly to the memory location of the variable every time the variable is accessed.</p>
+
+<p>In the example above, there are several sequence points between the initial setting of the <code>finished_reading</code> variable, and its occurrence in the loop condition. Under optimization, the compiler noticed
+that the variable never gets modified between these two points, and so optimized the accesses to it.
+But the ISR can execute at any time, which the compiler cannot expect.
+By using <code>volatile</code>, we forced the compiler to put the variable access back in.</p>
+
+<p>Choosing an optimization option in the compiler typically makes the execution of the code faster,
+at the expense of a larger executable. For example, sections of code may be repeated several times,
+rather than using a loop variable. Or functions may be copied and placed inline to save the time of
+a function call. Higher levels of optimization perform even deeper analysis on the code, to skip
+unnecessary machine instructions. Sometimes, this is not desirable.</p>
+
+<p>In our project, we qualified as <code>volatile</code> every variable used within an ISR. This sometimes makes the
+code run more slowly than it could, but at least it runs correctly.</p>
+
+<p>More information about <code>volatile</code> can be found here,</p>
+
+<a href="http://publications.gbdirect.co.uk/c_book/chapter8/const_and_volatile.html">The C Book - Const and volatile</a>
+<p>And here,</p>
+<a href="http://www.embedded.com/story/OEG20010615S0107">Embedded.com - Introduction to the Volatile Keyword</a>
+<br /><br />
+</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a class="current" href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+</div>
+</body>
+</html>

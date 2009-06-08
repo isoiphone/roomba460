@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="eng" xml:lang="eng">
+<head>
+<title>CSC 460: Report 2 - Testing</title>
+<style type="text/css">@import url(report2.css);</style>
+</head>
+<body>
+
+<div id="container">
+
+<div id="top">Scott Craig and Justin Tanner</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a class="current" href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+<div id="content">
+<h1>Test Cases</h1>
+
+<p>To test our RTOS we wrote 18 different test cases, broken into 3 major categories:</p>
+
+<ol>
+    <li>API Correctness</li>
+    <li>Performance</li>
+    <li>Invalid Operations</li>    
+</ol>
+
+<p>Each test contains one source code file and a AVR Studio project file. All these test are designed to probe different sections of the RTOS for possible errors or incorrect behavior.</p>
+
+<h1>API Correctness Tests</h1>
+
+<p>API correctness test are used to verify the behavior of all the basic constructs of the API.  Each function call is tested both individually and in concert with other functions.</p>
+
+<h2>Test 001 - Sanity Test</h2>
+
+<p><b>Objective:</b> Can we print a basic trace with UART?</p>
+<p><b>Description:</b> Simple test to ensure that the testing software can run on the RTOS.</p>
+<p><b>Code:</b> <a href="tests/test001_sanity.c">test001_sanity.c</a></p>
+<p><b>Expected Result:</b> An empty trace.</p>
+
+<pre class="code">
+T001;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0; ...
+</pre>
+
+<p><b>Comment:</b> No problems testing code works as expected.</p>
+
+<h2>Test 002 - Periodic</h2>
+
+<p><b>Objective:</b> Can the RTOS schedule PPP tasks in the correct order?</p>
+<p><b>Description:</b> Creating six PERIODIC tests in the order 1,2,4,5,6 to test the function Task_Create() and basic PERIODIC behavior.</p>
+<p><b>Code:</b> <a href="tests/test002_periodic.c">test002_periodic.c</a></p>
+<p><b>Expected Result:</b> 1,2,3,4,5,6 repeated.</p>
+
+<pre class="code">
+T002;1;2;3;4;5;6;1;2;3;4;5;6;1;2;3;4;5;6;1;2;3;4;5;6;1;2;3;4;5;6; ... 
+</pre>
+
+<p><b>Comment:</b> PERIODIC tasks are scheduled in the correct order.</p>
+
+<h2>Test 003 - Round Robin</h2>
+
+<p><b>Objective:</b> Can the RTOS schedule RR tasks in the expected order?</p>
+<p><b>Description:</b> Similar to the last test case but using RR ( round robin ) tasks instead of PERIODIC.</p>
+<p><b>Code:</b> <a href="tests/test003_roundrobin.c">test003_roundrobin.c</a></p>
+<p><b>Expected Result:</b> 1,2,3,4,5,6 repeated.</p>
+
+<pre class="code">
+T003;1;2;3;4;5;6;1;2;3;4;5;6;1;2;3;4;5;6;1;2;3;4;5;6;1;2;3;4;5;6; ... 
+</pre>
+
+<p><b>Comment:</b> RR tasks are scheduled in the correct order.</p>
+
+<h2>Test 004 - SYSTEM Tasks</h2>
+
+<p><b>Objective:</b> Can the RTOS schedule SYSTEM tasks in the expected order?</p>
+<p><b>Description:</b> Similar to the last test case but using SYSTEM tasks.</p>
+<p><b>Code:</b> <a href="tests/test004_system.c">test004_system.c</a></p>
+<p><b>Expected Result:</b> 1,2,3,4,5,6 repeated.</p>
+
+<pre class="code">
+T004;1;2;3;4;5;6;1;2;3;4;5;6;1;2;3;4;5;6;1;2;3;4;5;6;1;2;3;4;5;6; ... 
+</pre>
+
+<p><b>Comment:</b> SYSTEM tasks are scheduled in the correct order.</p>
+
+<h2>Test 005 - Interleaving Tasks</h2>
+
+<p><b>Objective:</b> Can the RTOS interleave RR and PERIODIC tasks?</p>
+<p><b>Description:</b> Given PERIODIC and RR tasks running together, can the RTOS run the PERIODIC tasks when expected, and fill-in the blanks with the RR tasks.</p>
+<p><b>Code:</b> <a href="tests/test005_interleave.c">test005_interleave.c</a></p>
+<p><b>Expected Result:</b> 1 followed by many 7's then 2, repeat</p>
+
+<pre class="code">
+T005;
+
+1;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;
+7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;
+
+2;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;
+7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;
+
+1;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;
+7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;
+
+2;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;
+7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;7;
+
+...
+
+</pre>
+
+<p><b>Comment:</b> After the first interval between 1 and 2, the amount of round robin tasks performed ( the number of 7's ) is the same between task 1 and task 2.</p>
+
+<h2>Test 006 - Event Wait</h2>
+
+<p><b>Objective:</b> Can the RTOS wait on an event?</p>
+<p><b>Description:</b> Testing the behavior of the Event_Signal() and Signal_And_Next() functions.  Does Signal_And_Next() actually signal a waiting event?</p>
+<p><b>Code:</b> <a href="tests/test006_eventwait.c">test006_eventwait.c</a></p>
+<p><b>Expected Result:</b> 1, 3, 2 repeated</p>
+
+<pre class="code">
+T006;1;3;2;1;3;2;1;3;2;1;3;2;1;3;2;1;3;2;1;3;2;1;3;2;1;3;2;1;3;2; ...
+</pre>
+
+<p><b>Comment:</b> No problems.</p>
+
+<h2>Test 007 - Broadcast</h2>
+
+<p><b>Objective:</b> Test if multiple RR tasks can wait and be signaled by a broadcast.</p>
+<p><b>Description:</b> Similar to the last test, but now testing Broadcast_And_Next() on multiple RR's waiting on the same event.</p>
+<p><b>Code:</b> <a href="tests/test007_broadcast.c">test007_broadcast.c</a></p>
+<p><b>Expected Result:</b> 10, 20 ( create RR's ) then 3 ( broadcast ), then 11, 21 ( released from wait ), repeated</p>
+
+<pre class="code">
+T007;10;20;3;11;21;10;20;3;11;21;10;20;3;11;21;10;20;3;11;21; ...
+</pre>
+
+<p><b>Comment:</b> No problems.</p>
+
+<h2>Test 008 - Signal First</h2>
+
+<p><b>Objective:</b> Multiple RR tasks wait on an event, see which one gets signaled first</p>
+<p><b>Description:</b> PERIODIC task is signaling, make sure that the waiting events get signaled in the correct order.</p>
+<p><b>Code:</b> <a href="tests/test008_signalfirst.c">test008_signalfirst.c</a></p>
+<p><b>Expected Result:</b>10, 20 ( initially wait in both RR tasks ), followed by 3 ( signal ), then 11, 10 ( release and wait again ), 3 (signal), 21, 20 ( release and wait again ), repeated. </p>
+
+<pre class="code">
+T008;
+
+10;20;
+
+3;11;10;3;21;20;3;11;10;3;21;20;3;11;10;3;21;20;3;11;10;3;21;20; ...
+</pre>
+
+<p><b>Comment:</b> No problems.</p>
+
+<h2>Test 009 - Ping Pong</h2>
+
+<p><b>Objective:</b> Multiple RR tasks wait on an event, see which one gets signaled first</p>
+<p><b>Description:</b> Two events with two RR tasks pinging and ponging back and forth.</p>
+<p><b>Code:</b> <a href="tests/test009_pingpong.c">test009_pingpong.c</a></p>
+<p><b>Expected Result:</b>10, 20 ( initial wait in both ping and pong ), followed by 11,10 ( signal pong and wait in ping ), 21,20 ( signal ping and wait in pong ), repeated.</p>
+
+<pre class="code">
+T009;
+
+10;20;
+
+11;10;21;20;11;10;21;20;11;10;21;20;11;10;21;20;11;10;21;20; ...
+</pre>
+
+<p><b>Comment:</b> No problems.</p>
+
+
+<h2>Test 010 - Multitest</h2>
+
+<p><b>Objective:</b> Many things at once, events, RR tasks and Periodic tasks.</p>
+<p><b>Description:</b> Trying to find problems that may crop up in more complicated scenarios where most of the API is used.</p>
+<p><b>Code:</b> <a href="tests/test010_multitest.c">test010_multitest.c</a></p>
+<p><b>Expected Result:</b> See code for details.</p>
+
+<pre class="code">
+T010;
+
+2;10;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;
+
+3;11;201;10;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;201;
+
+2;201;202;11;201;202;10;201;202;201;202;201;202;201;202;201;202;201;
+202;201;202;201;202;201;202;201;202;201;202;201;202;201;202;201;202;
+201;202;201;202;201;202;201;202;201;202;201;202;201;202;201;202;201;
+202;201;
+
+...
+
+</pre>
+
+<p><b>Comment:</b> No problems.</p>
+
+<h1>Performance</h1>
+
+<p>The following test measured preformance on the RTOS.</p>
+
+<h2>Test 011 - Round Robin Latency</h2>
+
+<p><b>Objective:</b> Measure the latency between RR tasks</p>
+<p><b>Description:</b> The full time between running a RR task, context switching and running the next RR task. Timing clock is set at 8Mhz.</p>
+<p><b>Code:</b> <a href="tests/test011_latency_roundrobin.c">test011_latency_roundrobin.c</a></p>
+<p><b>Expected Result:</b> A short time, much less an a tick.</b></p>
+
+<div class="centered_image"><img src="images/test011_graph.jpg" alt="histogram" border="0" /></div>
+
+<p><b>Comment:</b> On average the execution time was 0.07842ms which is less than one tick.</p>
+
+<h2>Test 012 - Periodic Latency</h2>
+
+<p><b>Objective:</b> Measure the execution time of a PERIODIC task.</p>
+<p><b>Description:</b> PERIODIC tasks with a 1 tick duration were measured from the start of execution, to the start of execution of the next task. Timing clock is set at 1Mhz.</p>
+<p><b>Code:</b> <a href="tests/test012_latency_periodic.c">test012_latency_periodic.c</a></p>
+<p><b>Expected Result:</b> One tick exactly.</p>
+
+<div class="centered_image"><img src="images/test012_graph.jpg" alt="histogram" border="0" /></div>
+
+<p><b>Comment:</b> With the exception of a few measurements, the test reads a consistent 5ms exactly 1 tick.</p>
+
+<h2>Test 013 - Event_Signal Latency</h2>
+
+<p><b>Objective:</b> Measure the latency of event signaling from a PERIODIC task to a RR.</p>
+<p><b>Description:</b> Time between signaling in a PERIODIC task to release from Event_Wait in a RR task. Timing clock is set at 8Mhz.</p>
+<p><b>Code:</b> <a href="tests/test013_latency_eventsignal.c">test013_latency_eventsignal.c</a></p>
+<p><b>Expected Result:</b> Less than a tick.</p>
+
+<div class="centered_image"><img src="images/test013_graph.jpg" alt="histogram" border="0" /></div>
+
+<p><b>Comment:</b> Every measurement was exactly the same 0.0594ms. This was the quickest operation tested yet.</p>
+
+
+<h2>Test 014 - Task_Create Latency</h2>
+
+<p><b>Objective:</b> Measure how long it takes to create a task</p>
+<p><b>Description:</b> Creating 3 PERIODIC tasks and 3 RR tasks, measure how long it takes to create. Clock is running at 8Mhz.</p>
+<p><b>Code:</b> <a href="tests/test014_latency_taskcreate.c">test014_latency_task_create.c</a></p>
+<p><b>Expected Result:</b> Less that a tick for both RR and PERIODIC.</p>
+
+<pre lass="code">
+    T014;    
+    628;624;699; ( RR )
+    630;633;708; ( PERIODIC )
+</pre>
+
+<p><b>Comment:</b> On average it took about 654 cycles @8Mhz, about <b>0.0817ms</b>, much less than a tick.</p>
+
+
+<h2>Test 015 - Overloaded PERIODIC</h2>
+
+<p><b>Objective:</b> Measure the latency of periodic tasks</p>
+<p><b>Description:</b> Maxing out what the RTOS is doing between tasks to try to overload it while it attempts to run PERIODIC tasks ontime. Timing clock is set at 8Mhz.</p>
+<p><b>Code:</b> <a href="tests/test015_latency_maxperiodic.c">test015_latency_maxperiodic.c</a></p>
+<p><b>Expected Result:</b> One tick exactly.</p>
+
+<div class="centered_image"><img src="images/test015_graph.jpg" alt="histogram" border="0" /></div>
+
+<p><b>Comment:</b> On average 10ms or 2 ticks! This is way off, potential bug.</p>
+
+
+<h2>Test 016 - Interrupt Latency</h2>
+
+<p><b>Objective:</b> Measure the latency of events signaled from an interrupt.</p>
+<p><b>Description:</b> Timer starts inside an interrupt and measures the time from signal to when the RR picks up after Event_Wait(). Timing clock is set at 1Mhz.</p>
+<p><b>Code:</b> <a href="tests/test016_latency_interrupt.c">test016_latency_interrupt.c</a></p>
+<p><b>Expected Result:</b> Much less than a tick.</p>
+
+<div class="centered_image"><img src="images/test016_graph.jpg" alt="histogram" border="0" /></div>
+
+<p><b>Comment:</b> ERROR in the test, constantly reading 65ms, but this is an incorrect result, there must be a fundamental problem in the RTOS or test.</p>
+
+<h1>Invalid Operations</h1>
+
+<p>The following tests gauge how the RTOS behaves in the presence of a error.</p>
+
+
+<h2>Test 017 - Too many PERIODIC tests</h2>
+
+<p><b>Objective:</b> Creating too many PERIODIC tests and see what happens.</p>
+<p><b>Description:</b> Creating nine PERIODIC tasks to overflow the max events by one.</p>
+<p><b>Code:</b> <a href="tests/test017_toomany_periodic.c">test017_toomany_periodic.c</a></p>
+<p><b>Expected Result:</b> An error code.</p>
+
+<pre class="code">
+    <span class="construct">ALL_LIGHTS</span> <span class="construct">RED</span> <span class="construct">RED</span>    
+</pre>
+
+<p><b>Comment:</b> Looking up this error code in error_code.h revealed that ERR_RUN_2_TOO_MANY_TASKS had executed correctly.</p>
+
+<h2>Test 018 - Wait in a PERIODIC</h2>
+
+<p><b>Objective:</b> Event_Wait() in a PERIODIC task and see what happens.</p>
+<p><b>Code:</b> <a href="tests/test018_periodic_eventwait.c">test018_periodic_eventwait.c</a></p>
+<p><b>Expected Result:</b> An error code.</p>
+
+<pre class="code">
+    <span class="construct">ALL_LIGHTS</span> <span class="construct">RED</span> <span class="construct">RED</span> <span class="construct">RED</span> <span class="construct">RED</span> <span class="construct">RED</span> <span class="construct">RED</span> <span class="construct">RED</span>
+</pre>
+
+<p><b>Comment:</b> Looking up this error code in error_code.h revealed that ERR_RUN_2_TOO_MANY_TASKS had executed correctly.</p>
+
+<br />
+<br />
+
+<p>For reference, <a href="tests/test_results.txt">Raw Test Data</a>.</p>
+<br />
+<br />
+
+</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a class="current" href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+</div>
+</body>
+</html>

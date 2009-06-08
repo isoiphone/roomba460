@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="eng" xml:lang="eng">
+<head>
+<title>CSC 460: Report 2 - Context Switching</title>
+<style type="text/css">@import url(report2.css);</style>
+</head>
+<body>
+
+<div id="container">
+
+<div id="top">Scott Craig and Justin Tanner</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a class="current" href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+<div id="content">
+<h1>Context Switching</h1>
+
+<p>In a multi-tasking operating system such as ours, a task or process executes as if it alone
+runs on the processor, and has no knowledge or concern about other possible tasks.
+Each task is suspended and resumed transparently from the point of view of the
+task, without any record-keeping or maintenance performed by the task itself.</p>
+
+<p>In order to run several tasks concurrently, each task is comprised of <em>code</em>, a sequence
+of machine instructions to perform, and a <em>context</em> in which the processor executes these instructions.
+Several tasks can even execute the same code; their contexts distinguish them.</p>
+
+<h2>What is a Context?</h2>
+
+<p>The context of a task includes all the information necessary to describe the state of the processor between
+execution of instructions, as well as a history of the execution of the task in the form of a stack. The context
+does not include information about the other elements of the micro-controller apart from the processor: timers,
+ports, peripherals, etc.</p>
+
+<p>On the AT90USB1287, the context is comprised of:</p>
+
+<ul>
+    <li>a program stack, which records the nesting of function calls</li>
+    <li>the general purpose registers 0 to 31</li>
+    <li>the Status Register (SREG), which indicates conditions of the processor</li>
+    <li>the Program Counter register (PC), which holds the address of the next machine instruction to be executed</li>
+    <li>the Stack Pointer register (SP), which points to the address in SRAM in which the next pushed item is to be placed, which is also the address above the next item to be popped.</li>
+</ul>
+
+<h2>Memory &amp; The Stack</h2>
+
+<p>The AT90USB1287 uses a <a href="http://en.wikipedia.org/wiki/Harvard_architecture">Harvard memory architecture</a> to separate data memory (internal SRAM) and the program memory space. The program memory stores the instructions to be
+executed. The data memory stores the variables used in the program, as well as the program stack.</p>
+
+<div class="centered_image"><img src="images/stack_init.jpg" alt="AT90USBKey Memory"/></div>
+
+<p>The above picture represents the layout our data memory after initialization by the <a href="crt0.html">C runtime</a> library.</p>
+<ul>
+<li>The .data section lies at the top of memory. It holds static variables which are initialized in the
+program. (The meaning of static here also includes top-level variables which are not declared to be
+<code>static</code>.)</li>
+<li>The .bss section which follows holds the remainder of the static variables, which are
+not initialized or are initialized to zero.</li>
+<li>The stack area starts at the end of memory. The SP register initially points to the last address in SRAM and the
+stack grows "downward" towards the lower addresses as items are pushed on. There is no actual separation of the
+stack from the other areas--if enough pushes are made, the program will "blow up" the stack and overrun the
+program data.</li>
+<li>the area following the .bss section is the heap, where memory can be dynamically allocated
+as with <code>malloc()</code>. We do not use dynamic allocation in our kernel, but the user application
+might even though it is generally not recommended in embedded systems.</li>
+</ul>
+
+
+<h2>Where is "the" stack?</h2>
+
+<p>In the picture above, the stack pointer initially points to the end of memory. But each task is
+to have its own stack. Where are these to reside?</p>
+
+<p>The key observation is that a stack can reside anywhere in SRAM. So we declare an array of sufficient size
+to hold one task's stack. Of course, we still risk blowing up stacks as before. The array for the stack
+can be grouped together with the other context data for the task:</p>
+<pre class="code">
+<span class="construct">typedef struct</span>
+{
+    <span class="type">uint8_t</span>        <span class="ident">stack</span>[256];
+    <span class="type">uint8_t*</span>       <span class="ident">sp</span>;
+}
+<span class="type">context_type</span>;
+</pre>
+
+<p>Then we set aside the memory for all of the task contexts, including the stacks, with the
+definition:</p>
+
+<pre class="code">
+<span class="type">static context_type</span> <span class="ident">context</span>[3];
+</pre>
+
+<p>The data memory now looks like this,</p>
+
+<div class="centered_image"><img src="images/stack_init2.jpg" alt="AT90USBKey Memory"/></div>
+
+<p>Within each context we must store all the elements of the task's context: R0 to R31, SREG, PC and an SP.
+How this is done is described below.</p>
+
+<div class="centered_image"><img src="images/stack_init3.jpg" alt="AT90USBKey Memory"/></div>
+
+<h2>Switching Contexts</h2>
+
+<p>Now let us imagine that the task of <code>context[0]</code> is running, and that the OS needs to suspend
+this task and resume the task of <code>context[1]</code>.</p>
+
+<p>The processor's stack pointer, SP, is currently pointing somewhere inside the stack array in the context.</p>
+
+<div class="centered_image"><img src="images/context_single2.jpg" alt="AT90USBKey Memory"/></div>
+
+<p>Somehow, either with an interrupt or with an explicit call to <code>next()</code>, the context switch is
+initiated. In either case, the address of the next instruction to return to is pushed onto the stack. This
+takes care of storing the task's PC.</p>
+
+<p>The first few instructions of the ISR or the <code>next()</code> function push the contents of the
+status register SREG and all 32 general purpose registers onto the stack as well.</p>
+
+<div class="centered_image"><img src="images/context_single3.jpg" alt="AT90USBKey Memory"/></div>
+
+<p>The last element of the task's context, the current value of SP, is saved in <code>context[0].sp</code>
+ and <code>next()</code> is ready to switch to another context.
+next() will first change the SP register to point to the top of the stack in next task's context,
+using the value saved in <code>context[1].sp</code>.</p>
+
+<div class="centered_image"><img src="images/context_single4.jpg" alt="AT90USBKey Memory"/></div>
+
+<p>Notice that the <code>context[1]</code> task has been left in a similar state as the <code>context[0]</code> task.
+So to restore this context, the values of the registers must be popped off the new stack in the reverse order.</p>
+
+<div class="centered_image"><img src="images/context_single5.jpg" alt="AT90USBKey Memory"/></div>
+
+<p>The final step to restore this context is to restore the program counter from the stack
+and resume execution of the task.
+This is precisely the action of the assembly instruction <code>ret</code>.</p>
+
+<div class="centered_image"><img src="images/context_single6.jpg" alt="AT90USBKey Memory"/></div>
+
+<p>Now we are now running task 1's code with context[1] stack.  The context switch is complete.</p>
+
+
+<h2>Constructing a Context</h2>
+
+<p>We described how to resume a suspended task, but how are tasks started in the first place?
+The trick is to initialize the task's context as if it had been suspended, even though it wasn't.</p>
+
+<p>At the bottom of the stack (the end of the stack array) needs to lie the address to "return" to the first time
+the task is switched in. We want this to be the first instruction in the task's code. In C, this is just the name
+of the task's function without parentheses following. The address occupies two bytes and care must be taken to place
+the bytes in the right order at the end of the stack array.</p>
+
+<p>Above the PC (earlier in the array), we need initial values for the registers and SREG. Since the task is executing
+as if its function were being called for the first time, the only crucial values are r1 (the "zero" register),
+which gcc requires to contain the value 0, and the I bit of SREG, which should be 1 to enable interrupts.</p>
+
+<p>Then the stored value for SP for this task must be set to point to the "top" of the stack, 35 bytes from the end
+of the array.</p>
+
+<p>This setup procedure would be good enough if each task terminated itself properly with a call to
+<code>Task_Terminate()</code>, or else never returns. To handle the case where the user simply lets the task
+code function call <code>return</code>, we need to supply another address even lower in the stack. So we actually
+place all the items listed above 2 spots lower in the stack array
+(higher in the stack), and at the end of the array we place
+the address of <code>Task_Terminate</code> itself. Then if the function returns, it will begin executing
+<code>Task_Terminate()</code> as if the user had called it.</p>
+
+</div>
+
+<div id="menu">
+<ul>
+    <li><a href="index.html">Home</a>&nbsp;|</li>
+    <li><a href="design.html">Design</a>&nbsp;|</li>
+    <li><a href="scheduler.html">Scheduler</a>&nbsp;|</li>
+    <li><a class="current" href="context_switch.html">Context Switching</a>&nbsp;|</li>
+    <li><a href="crt0.html">C Runtime</a>&nbsp;|</li>
+    <li><a href="one_file.html">One File</a>&nbsp;|</li>
+    <li><a href="volatile.html">Volatile</a>&nbsp;|</li>
+    <li><a href="testing.html">Testing</a>&nbsp;|</li>
+    <li><a href="test_cases.html">Test Cases</a>&nbsp;|</li>    
+    <li><a href="code.html">Code</a></li>
+</ul>
+</div>
+
+</div>
+</body>
+</html>
