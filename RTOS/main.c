@@ -43,6 +43,18 @@ enum {
 	DISP		// calcultes and displays some speed measurements
 };
 
+// From Assignment:
+// 1. Run all your tasks as PERIODIC tasks.
+// 2. Run all your tasks as a mixture of SYSTEM and ROUND ROBIN tasks.
+// 3. Finally, use EVENTS to coordinate your tasks in (2).
+#define TESTCASE_1	1
+//#define TESTCASE_2	2
+//#define TESTCASE_3	3
+
+#if defined(TESTCASE_3)
+EVENT* gamepad_event;
+#endif
+
 const unsigned char PPP[] = {
     GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
     GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
@@ -65,7 +77,6 @@ const unsigned char PPP[] = {
     GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
     GPAD, 2, DRIV, 2, RECV, 2, DISP, 2, IDLE, 2
 };
-
 const unsigned int PT = 100;
 
 
@@ -169,6 +180,10 @@ void task_drive(void)
 	{
 		uint8_t arguments[4];
 
+		#if defined(TESTCASE_3)
+		Event_Wait(gamepad_event);
+		#endif
+		
 		// map gamepad left and right joysticks positions to roomba values
 		int16_t velocity, radius;
 		joystick_to_movement(gamepad_status.x2, gamepad_status.y1, &velocity, &radius);
@@ -245,10 +260,23 @@ int main(void)
 		USB_USBTask();
 	}
 
+	#if defined(TESTCASE_1)
 	Task_Create(task_gamepad, GPAD, PERIODIC, GPAD);
 	Task_Create(task_drive, DRIV, PERIODIC, DRIV);
 	Task_Create(task_radio_receive, RECV, PERIODIC, RECV);
 	Task_Create(task_update_speed_display, DISP, PERIODIC, DISP);
+	#elif defined(TESTCASE_2)
+	Task_Create(task_gamepad, GPAD, RR, GPAD);
+	Task_Create(task_drive, DRIV, SYSTEM, DRIV);
+	Task_Create(task_radio_receive, RECV, SYSTEM, RECV);
+	Task_Create(task_update_speed_display, DISP, RR, DISP);
+	#elif defined(TESTCASE_3)
+	gamepad_event = Event_Init(); 
+	Task_Create(task_gamepad, GPAD, PERIODIC, GPAD);
+	Task_Create(task_drive, DRIV, RR, DRIV);
+	Task_Create(task_radio_receive, RECV, RR, RECV);
+	Task_Create(task_update_speed_display, DISP, RR, DISP);
+	#endif
 
 	return 0;
 }
@@ -365,6 +393,9 @@ void task_gamepad(void)
 {
 	uint8_t ErrorCode;
 
+	while (1) 
+	{
+		
 	// jms: ensure USB is pumped periodically so it does not time out.
 	USB_USBTask();
 	
@@ -441,6 +472,13 @@ void task_gamepad(void)
 			read_gamepad_report();
 
 			break;
+	}
+	
+	#if defined(TESTCASE_3)
+		Signal_And_Next(gamepad_event);
+	#else
+		Task_Next();
+	#endif
 	}
 }
 
