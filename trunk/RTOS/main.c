@@ -9,15 +9,20 @@
 #include "sensor_struct.h"
 #include "joy2mov.h"
 
+
+// network addresses
 uint8_t my_addr[5] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
 uint8_t roomba_addr[5] = { 0xED, 0xB7, 0xED, 0xB7, 0xED};
 
 
+// timing and process communication flags
 volatile uint8_t rxflag = 0;
 volatile int16_t prev_distance = 0;
 volatile uint16_t prev_time = 0;
 volatile uint16_t previous_speed_update_ticks = 0;
 
+
+// gamepad state
 USB_GamepadReport_Data_t gamepad_status;
 
 enum {
@@ -28,6 +33,40 @@ enum {
 };
 
 volatile uint8_t Gamepad_State = Gamepad_Disconnected;
+
+
+// the RTOS
+enum {
+	GPAD=1,	// gamepad task polls gamepad for a new state structure
+	DRIV,		// drive creates and transmits the driving control packet
+	RECV,	// reads status packets
+	DISP		// calcultes and displays some speed measurements
+};
+
+const unsigned char PPP[] = {
+    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, DRIV, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, DRIV, 2, RECV, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, DRIV, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
+    GPAD, 2, DRIV, 2, RECV, 2, DISP, 2, IDLE, 2
+};
+
+const unsigned int PT = 100;
 
 
 void allow_interupts(bool allow)
@@ -75,25 +114,35 @@ void handle_received_radio_packet(radiopacket_t* packet)
 
 void task_radio_receive(void)
 {
-	if (rxflag)
+	while (1)
 	{
-		radiopacket_t packet;
-		memset(&packet, 0, sizeof(packet));
-        
-        // read as many packets as we received, we are only interested in the most recent one
-		while (Radio_Receive(&packet) == RADIO_RX_MORE_PACKETS) {}
+		if (rxflag)
+		{
+			radiopacket_t packet;
+			memset(&packet, 0, sizeof(packet));
 		
-		rxflag = 0;
+		// read as many packets as we received, we are only interested in the most recent one
+			while (Radio_Receive(&packet) == RADIO_RX_MORE_PACKETS) {}
+			
+			rxflag = 0;
 
-		handle_received_radio_packet(&packet);
+			handle_received_radio_packet(&packet);
+		}
+		
+		Task_Next();
 	}
 }
 
 
 void task_update_speed_display(void)
 {
-	int16_t speed = (100 * (uint16_t)prev_distance) / prev_time;
-	printf_P(PSTR("dist: %d dt: %2dms speed:%2d cm/s\r\n"), prev_distance, prev_time, speed);
+	while (1) 
+	{
+		int16_t speed = (100 * (uint16_t)prev_distance) / prev_time;
+		printf_P(PSTR("dist: %d dt: %2dms speed:%2d cm/s\r\n"), prev_distance, prev_time, speed);
+		
+		Task_Next();
+	}
 }
 
 
@@ -113,25 +162,31 @@ void send_to_roomba(uint8_t command, uint8_t* arguments, uint8_t num_arg_bytes)
 	Radio_Transmit(&packet, RADIO_WAIT_FOR_TX);
 }
 
+
 void task_drive(void)
 {
-	uint8_t arguments[4];
+	while (1)
+	{
+		uint8_t arguments[4];
 
-    // map gamepad left and right joysticks positions to roomba values
-    int16_t velocity, radius;
-    joystick_to_movement(gamepad_status.x2, gamepad_status.y1, &velocity, &radius);
+		// map gamepad left and right joysticks positions to roomba values
+		int16_t velocity, radius;
+		joystick_to_movement(gamepad_status.x2, gamepad_status.y1, &velocity, &radius);
 
-    // debug printing
-	printf_P(PSTR("DRIVE: (v=%3d,r=%3d) STICK: %3d,%3d\r\n"), velocity, radius, gamepad_status.x2, gamepad_status.y1);
+		// debug printing
+		printf_P(PSTR("DRIVE: (v=%3d,r=%3d) STICK: %3d,%3d\r\n"), velocity, radius, gamepad_status.x2, gamepad_status.y1);
 
-    // roomba uses different endianness
-	velocity = htons(velocity);
-	memcpy(&arguments[0], &velocity, 2);
-	radius = htons(radius);
-	memcpy(&arguments[2], &radius, 2);
+		// roomba uses different endianness
+		velocity = htons(velocity);
+		memcpy(&arguments[0], &velocity, 2);
+		radius = htons(radius);
+		memcpy(&arguments[2], &radius, 2);
 
-    // deliver driving packet
-	send_to_roomba(DRIVE, arguments, sizeof(arguments));
+		// deliver driving packet
+		send_to_roomba(DRIVE, arguments, sizeof(arguments));
+		
+		Task_Next();
+	}
 }
 
 
@@ -141,34 +196,30 @@ void initialize_all(void)
 	// initialization
 	allow_interupts(false);
 	/*
+		// RTOS code does not now.
 		// Disable watchdog if enabled by bootloader/fuses
 		MCUSR &= ~(1 << WDRF);
 		wdt_disable();
 
 		// Disable clock division
 		clock_prescale_set(clock_div_1);
-*/
-		// timer!
-		//Timer_Init();
-
+	*/
 		// init the LUFA UART
 		SerialStream_Init(9600, false);
 
-		// init LUFA
-		//Joystick_Init();
+		// init the LUFA LEDS
 		LEDs_Init();
-
 		LEDs_SetAllLEDs(LEDS_LED1);
-
-		// Initialize USB Subsystem
+	
+		// init the LUFA USB
 		USB_Init();
 
+		// init the radio
 		Radio_Init();
 		Radio_Configure_Rx(RADIO_PIPE_0, my_addr, ENABLE);
 		Radio_Configure(RADIO_2MBPS, RADIO_HIGHEST_POWER);
 	allow_interupts(true);
-
-
+	
 	_delay_ms(10);
 	puts_P(PSTR("[--- started ---]\r\n"));
 
@@ -179,45 +230,12 @@ void initialize_all(void)
 }
 
 
-void run_event_loop(void)
-{
-	while (1)
-	{
-		task_radio_receive();
-		task_update_speed_display();
-		task_gamepad();
-		task_drive();
-
-		USB_USBTask();
-
-		Task_Next();
-	}
-}
-
-
-
-const unsigned char PPP[] = {1, 50, 
-							 2, 50};
-const unsigned int PT = 2;
-
-void blink_task (void)
-{
-	uint8_t LEDMask = LEDS_NO_LEDS;
-
-	while (1) {
-		LEDMask ^= LEDS_LED1;
-		LEDs_SetAllLEDs(LEDMask);
-
-        Task_Next();
-	}
-}
-
-
+// Entry point (called by the RTOS)
 int main(void)
 {
 	initialize_all();
 
-    // ensure roomba is in command mode, with full control
+	// ensure roomba is in command mode, with full control
 	send_to_roomba(START, 0, 0);
 	send_to_roomba(CONTROL, 0, 0);
 	send_to_roomba(FULL, 0, 0);
@@ -227,9 +245,12 @@ int main(void)
 		USB_USBTask();
 	}
 
-	Task_Create(run_event_loop, 1, PERIODIC, 1);
-	Task_Create(blink_task, 2, PERIODIC, 2);
-    return 0;
+	Task_Create(task_gamepad, GPAD, PERIODIC, GPAD);
+	Task_Create(task_drive, DRIV, PERIODIC, DRIV);
+	Task_Create(task_radio_receive, RECV, PERIODIC, RECV);
+	Task_Create(task_update_speed_display, DISP, PERIODIC, DISP);
+
+	return 0;
 }
 
 
@@ -344,6 +365,9 @@ void task_gamepad(void)
 {
 	uint8_t ErrorCode;
 
+	// jms: ensure USB is pumped periodically so it does not time out.
+	USB_USBTask();
+	
 	// Switch to determine what user-application handled host state the host state machine is in
 	switch (USB_HostState)
 	{
