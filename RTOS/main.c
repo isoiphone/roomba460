@@ -20,7 +20,7 @@ volatile uint8_t rxflag = 0;
 volatile int16_t prev_distance = 0;
 volatile uint16_t prev_time = 0;
 volatile uint16_t previous_speed_update_ticks = 0;
-
+volatile uint8_t LEDs = LEDS_NO_LEDS;
 
 // gamepad state
 USB_GamepadReport_Data_t gamepad_status;
@@ -47,38 +47,47 @@ enum {
 // 1. Run all your tasks as PERIODIC tasks.
 // 2. Run all your tasks as a mixture of SYSTEM and ROUND ROBIN tasks.
 // 3. Finally, use EVENTS to coordinate your tasks in (2).
-#define TESTCASE_1	1
+//#define TESTCASE_1	1
 //#define TESTCASE_2	2
 //#define TESTCASE_3	3
 
-#if defined(TESTCASE_3)
-EVENT* gamepad_event;
-#endif
+//#if defined(TESTCASE_3)
+//EVENT* gamepad_event;
+//#endif
 
+/*
 const unsigned char PPP[] = {
-    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, DRIV, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, DRIV, 2, RECV, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, DRIV, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, RECV, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, IDLE, 2, IDLE, 2, IDLE, 2, IDLE, 2, 
-    GPAD, 2, DRIV, 2, RECV, 2, DISP, 2, IDLE, 2
+    GPAD, 4, IDLE, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, RECV, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, RECV, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, DRIV, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, RECV, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, RECV, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, DRIV, 4, RECV, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, RECV, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, RECV, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, DRIV, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, RECV, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, RECV, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, IDLE, 4, IDLE, 4, IDLE, 4, IDLE, 4, 
+    GPAD, 4, DRIV, 4, RECV, 4, DISP, 4, IDLE, 2
 };
 const unsigned int PT = 100;
+*/
 
+const unsigned char PPP[] = {
+    GPAD, 4,
+	DRIV, 4,
+	RECV, 4,
+	DISP, 4,
+};
+const unsigned int PT = 4;
 
 void allow_interupts(bool allow)
 {
@@ -140,6 +149,8 @@ void task_radio_receive(void)
 			handle_received_radio_packet(&packet);
 		}
 		
+		LEDs ^= LEDS_LED3;
+		LEDs_SetAllLEDs(LEDs);
 		Task_Next();
 	}
 }
@@ -150,8 +161,11 @@ void task_update_speed_display(void)
 	while (1) 
 	{
 		int16_t speed = (100 * (uint16_t)prev_distance) / prev_time;
-		printf_P(PSTR("dist: %d dt: %2dms speed:%2d cm/s\r\n"), prev_distance, prev_time, speed);
-		
+		//printf_P(PSTR("dist: %d dt: %2dms speed:%2d cm/s\r\n"), prev_distance, prev_time, speed);
+		puts_P(PSTR("disp.\r\n"));
+
+		LEDs ^= LEDS_LED4;
+		LEDs_SetAllLEDs(LEDs);
 		Task_Next();
 	}
 }
@@ -178,18 +192,19 @@ void task_drive(void)
 {
 	while (1)
 	{
+
 		uint8_t arguments[4];
 
-		#if defined(TESTCASE_3)
-		Event_Wait(gamepad_event);
-		#endif
+		//#if defined(TESTCASE_3)
+		//Event_Wait(gamepad_event);
+		//#endif
 		
 		// map gamepad left and right joysticks positions to roomba values
 		int16_t velocity, radius;
 		joystick_to_movement(gamepad_status.x2, gamepad_status.y1, &velocity, &radius);
 
 		// debug printing
-		printf_P(PSTR("DRIVE: (v=%3d,r=%3d) STICK: %3d,%3d\r\n"), velocity, radius, gamepad_status.x2, gamepad_status.y1);
+		//printf_P(PSTR("DRIVE: (v=%3d,r=%3d)\r\n"), velocity, radius);
 
 		// roomba uses different endianness
 		velocity = htons(velocity);
@@ -199,8 +214,11 @@ void task_drive(void)
 
 		// deliver driving packet
 		send_to_roomba(DRIVE, arguments, sizeof(arguments));
-		
+
+		LEDs ^= LEDS_LED2;
+		LEDs_SetAllLEDs(LEDs);
 		Task_Next();
+
 	}
 }
 
@@ -210,7 +228,6 @@ void initialize_all(void)
 {
 	// initialization
 	allow_interupts(false);
-	/*
 		// RTOS code does not now.
 		// Disable watchdog if enabled by bootloader/fuses
 		MCUSR &= ~(1 << WDRF);
@@ -218,13 +235,13 @@ void initialize_all(void)
 
 		// Disable clock division
 		clock_prescale_set(clock_div_1);
-	*/
+
 		// init the LUFA UART
 		SerialStream_Init(9600, false);
 
 		// init the LUFA LEDS
 		LEDs_Init();
-		LEDs_SetAllLEDs(LEDS_LED1);
+		LEDs_SetAllLEDs(LEDS_LED1|LEDS_LED2|LEDS_LED3|LEDS_LED4);
 	
 		// init the LUFA USB
 		USB_Init();
@@ -233,38 +250,56 @@ void initialize_all(void)
 		Radio_Init();
 		Radio_Configure_Rx(RADIO_PIPE_0, my_addr, ENABLE);
 		Radio_Configure(RADIO_2MBPS, RADIO_HIGHEST_POWER);
+
+		// direct messages to roomba
+		Radio_Set_Tx_Addr(roomba_addr);
+
+		previous_speed_update_ticks = Now();
+
+		_delay_ms(10);
+		puts_P(PSTR("[--- started ---]\r\n"));
 	allow_interupts(true);
-	
-	_delay_ms(10);
-	puts_P(PSTR("[--- started ---]\r\n"));
-
-	// direct messages to roomba
-	Radio_Set_Tx_Addr(roomba_addr);
-
-	previous_speed_update_ticks = Now();
 }
 
+
+// ensure roomba is in command mode, with full control, and stopped.
+void stop_roomba()
+{
+	uint8_t args[4] = {0,0,0,0};
+	send_to_roomba(START, 0, 0);
+	_delay_ms(10);
+	send_to_roomba(CONTROL, 0, 0);
+	_delay_ms(10);
+	send_to_roomba(FULL, 0, 0);
+	_delay_ms(10);
+	send_to_roomba(DRIVE, args, 4);
+	_delay_ms(10);
+}
 
 // Entry point (called by the RTOS)
 int main(void)
 {
 	initialize_all();
 
-	// ensure roomba is in command mode, with full control
-	send_to_roomba(START, 0, 0);
-	send_to_roomba(CONTROL, 0, 0);
-	send_to_roomba(FULL, 0, 0);
+	stop_roomba();
+	puts_P(PSTR("waiting for gamepad.\r\n"));
 
 	// wait for gamepad to be plugged in and configured
 	while (Gamepad_State != Gamepad_Connected) {
 		USB_USBTask();
 	}
 
-	#if defined(TESTCASE_1)
+
+	
+	LEDs_SetAllLEDs(LEDS_NO_LEDS);
+
+	//#if defined(TESTCASE_1)
 	Task_Create(task_gamepad, GPAD, PERIODIC, GPAD);
 	Task_Create(task_drive, DRIV, PERIODIC, DRIV);
 	Task_Create(task_radio_receive, RECV, PERIODIC, RECV);
 	Task_Create(task_update_speed_display, DISP, PERIODIC, DISP);
+
+	/*
 	#elif defined(TESTCASE_2)
 	Task_Create(task_gamepad, GPAD, RR, GPAD);
 	Task_Create(task_drive, DRIV, SYSTEM, DRIV);
@@ -277,6 +312,9 @@ int main(void)
 	Task_Create(task_radio_receive, RECV, RR, RECV);
 	Task_Create(task_update_speed_display, DISP, RR, DISP);
 	#endif
+	*/
+
+
 
 	return 0;
 }
@@ -337,7 +375,7 @@ EVENT_HANDLER(USB_HostError)
 	USB_ShutDown();
 
 	puts_P(PSTR(ESC_BG_RED "Host Mode Error\r\n"));
-	printf_P(PSTR(" -- Error Code %d\r\n"), ErrorCode);
+	//printf_P(PSTR(" -- Error Code %d\r\n"), ErrorCode);
 
 	Gamepad_State = Gamepad_Error;
 	// halt forever
@@ -349,9 +387,9 @@ EVENT_HANDLER(USB_HostError)
 EVENT_HANDLER(USB_DeviceEnumerationFailed)
 {
 	puts_P(PSTR(ESC_BG_RED "Dev Enum Error\r\n"));
-	printf_P(PSTR(" -- Error Code %d\r\n"), ErrorCode);
-	printf_P(PSTR(" -- Sub Error Code %d\r\n"), SubErrorCode);
-	printf_P(PSTR(" -- In State %d\r\n"), USB_HostState);
+	//printf_P(PSTR(" -- Error Code %d\r\n"), ErrorCode);
+	//printf_P(PSTR(" -- Sub Error Code %d\r\n"), SubErrorCode);
+	//printf_P(PSTR(" -- In State %d\r\n"), USB_HostState);
 
 	update_status(Status_EnumerationError);
 	Gamepad_State = Gamepad_Error;
@@ -395,90 +433,92 @@ void task_gamepad(void)
 
 	while (1) 
 	{
-		
-	// jms: ensure USB is pumped periodically so it does not time out.
-	USB_USBTask();
+		// jms: ensure USB is pumped periodically so it does not time out.
+		USB_USBTask();
 	
-	// Switch to determine what user-application handled host state the host state machine is in
-	switch (USB_HostState)
-	{
-		case HOST_STATE_Addressed:
-			// Standard request to set the device configuration to configuration 1
-			USB_ControlRequest = (USB_Request_Header_t)
+		// Switch to determine what user-application handled host state the host state machine is in
+		switch (USB_HostState)
+		{
+			case HOST_STATE_Addressed:
+				// Standard request to set the device configuration to configuration 1
+				USB_ControlRequest = (USB_Request_Header_t)
+					{
+						.bmRequestType = (REQDIR_HOSTTODEVICE | REQTYPE_STANDARD | REQREC_DEVICE),
+						.bRequest      = REQ_SetConfiguration,
+						.wValue        = 1,
+						.wIndex        = 0,
+						.wLength       = 0,
+					};
+
+				// Select the control pipe for the request transfer
+				Pipe_SelectPipe(PIPE_CONTROLPIPE);
+
+				// Send the request, display error and wait for device detach if request fails
+				if ((ErrorCode = USB_Host_SendControlRequest(NULL)) != HOST_SENDCONTROL_Successful)
 				{
-					.bmRequestType = (REQDIR_HOSTTODEVICE | REQTYPE_STANDARD | REQREC_DEVICE),
-					.bRequest      = REQ_SetConfiguration,
-					.wValue        = 1,
-					.wIndex        = 0,
-					.wLength       = 0,
-				};
-
-			// Select the control pipe for the request transfer
-			Pipe_SelectPipe(PIPE_CONTROLPIPE);
-
-			// Send the request, display error and wait for device detach if request fails
-			if ((ErrorCode = USB_Host_SendControlRequest(NULL)) != HOST_SENDCONTROL_Successful)
-			{
-				// Indicate error status
-				update_status(Status_EnumerationError);
+					// Indicate error status
+					update_status(Status_EnumerationError);
 				
-				// Wait until USB device disconnected
-				while (USB_IsConnected);
-				break;
-			}
+					// Wait until USB device disconnected
+					while (USB_IsConnected);
+					break;
+				}
 			
-			USB_HostState = HOST_STATE_Configured;
-			break;
-		case HOST_STATE_Configured:
-			// Get and process the configuration descriptor data
-			if ((ErrorCode = ProcessConfigurationDescriptor()) != SuccessfulConfigRead)
-			{
-				// Indicate error status
-				update_status(Status_EnumerationError);
-
-				// Wait until USB device disconnected
-				while (USB_IsConnected);
+				USB_HostState = HOST_STATE_Configured;
 				break;
-			}
-		
-			// HID class request to set the gamepad protocol to the Boot Protocol
-			USB_ControlRequest = (USB_Request_Header_t)
+			case HOST_STATE_Configured:
+				// Get and process the configuration descriptor data
+				if ((ErrorCode = ProcessConfigurationDescriptor()) != SuccessfulConfigRead)
 				{
-					.bmRequestType = (REQDIR_HOSTTODEVICE | REQTYPE_CLASS | REQREC_INTERFACE),
-					.bRequest      = REQ_SetProtocol,
-					.wValue        = 0,
-					.wIndex        = 0,
-					.wLength       = 0,
-				};
+					// Indicate error status
+					update_status(Status_EnumerationError);
 
-			// Select the control pipe for the request transfer
-			Pipe_SelectPipe(PIPE_CONTROLPIPE);
+					// Wait until USB device disconnected
+					while (USB_IsConnected);
+					break;
+				}
+		
+				// HID class request to set the gamepad protocol to the Boot Protocol
+				USB_ControlRequest = (USB_Request_Header_t)
+					{
+						.bmRequestType = (REQDIR_HOSTTODEVICE | REQTYPE_CLASS | REQREC_INTERFACE),
+						.bRequest      = REQ_SetProtocol,
+						.wValue        = 0,
+						.wIndex        = 0,
+						.wLength       = 0,
+					};
 
-			// Send the request, display error and wait for device detach if request fails
-			if ((ErrorCode = USB_Host_SendControlRequest(NULL)) != HOST_SENDCONTROL_Successful)
-			{
-				// Indicate error status
-				update_status(Status_EnumerationError);
+				// Select the control pipe for the request transfer
+				Pipe_SelectPipe(PIPE_CONTROLPIPE);
+
+				// Send the request, display error and wait for device detach if request fails
+				if ((ErrorCode = USB_Host_SendControlRequest(NULL)) != HOST_SENDCONTROL_Successful)
+				{
+					// Indicate error status
+					update_status(Status_EnumerationError);
 				
-				// Wait until USB device disconnected
-				while (USB_IsConnected);
+					// Wait until USB device disconnected
+					while (USB_IsConnected);
+					break;
+				}
+
+				USB_HostState = HOST_STATE_Ready;
 				break;
-			}
+			case HOST_STATE_Ready:
+				// If a report has been received, read and process it
+				read_gamepad_report();
 
-			USB_HostState = HOST_STATE_Ready;
-			break;
-		case HOST_STATE_Ready:
-			// If a report has been received, read and process it
-			read_gamepad_report();
+				break;
+		}
+		LEDs ^= LEDS_LED1;
+		LEDs_SetAllLEDs(LEDs);
 
-			break;
-	}
-	
-	#if defined(TESTCASE_3)
-		Signal_And_Next(gamepad_event);
-	#else
-		Task_Next();
-	#endif
+		//#if defined(TESTCASE_3)
+		//	Signal_And_Next(gamepad_event);
+		//#else
+
+			Task_Next();
+		//#endif
 	}
 }
 

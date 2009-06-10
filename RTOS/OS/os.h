@@ -144,13 +144,13 @@
 /* limits */
 
 /** max. number of processes supported */
-#define MAXPROCESS     8
+#define MAXPROCESS     5
 
 /** max. number of Events supported */
-#define MAXEVENT    8
+#define MAXEVENT    5
 
 /** workspace size of each process in bytes */
-#define WORKSPACE      256
+#define WORKSPACE      1024
 
 /** milliseconds, or something close to this value
  * \sa \ref periodic.

@@ -44,13 +44,13 @@ const int16_t RADIUS_TABLE[256] = {
 void joystick_to_movement(uint8_t x, uint8_t y, int16_t* velocity, int16_t* radius)
 {
     // use a running average to smooth between sudden changes in joystick position
-    static uint8_t prev_x = 128;
-    static uint8_t prev_y = 128;
+    //static uint8_t prev_x = 128;
+    //static uint8_t prev_y = 128;
  
- 	prev_x = (x + prev_x)/2;
-	prev_y = (y + prev_y)/2;
+ 	//prev_x = (x + prev_x)/2;
+	//prev_y = (y + prev_y)/2;
 
  	// get values from lookup rable
-    *velocity = VELOCITY_TABLE[prev_y];
-    *radius = RADIUS_TABLE[prev_x];
+    *velocity = VELOCITY_TABLE[y];
+    *radius = RADIUS_TABLE[x];
 }
