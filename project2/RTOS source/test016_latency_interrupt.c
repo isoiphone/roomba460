@@ -2,9 +2,9 @@
  * @file   test016.c
  * @author Scott Craig and Justin Tanner
  * @date   Mon Oct 29 16:19:32 2007
- * 
+ *
  * @brief  Test 016 - How long does it take for an event to be signaled from an ISR
- * 
+ *
  */
 
 #include "common.h"
@@ -26,7 +26,7 @@ void round_robin(void)
     for(;;)
     {
         Event_Wait(event);
-        add_to_trace(inside_interrupt - TCNT3);
+        add_to_trace(TCNT3 - inside_interrupt);
         Task_Next();
     }
 }
@@ -42,7 +42,7 @@ int main(void)
     print_event = Event_Init();
 
     Task_Create(round_robin, 0, RR, 0);
- 
+
     /* Run clock at 1MHz. */
     TCCR3B = _BV(CS31);
     OCR3A = 0x10;
@@ -54,7 +54,7 @@ int main(void)
     TIMSK3 |= _BV(OCIE3A);
 
     Event_Wait(print_event);
-    print_trace();    
+    print_trace();
 }
 
 ISR(TIMER3_COMPA_vect)
