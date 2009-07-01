@@ -213,7 +213,7 @@ static void kernel_handle_request(void) {
 		kernel_update_ticker();
 
 		/* Round robin tasks get pre-empted on every tick. */
-		if (cur_task->level == RR && cur_task->state == RUNNING) {
+		if (cur_task->level == BRR && cur_task->state == RUNNING) {
 			cur_task->state = READY;
 			enqueue(&rr_queue, cur_task);
 		}
@@ -233,14 +233,14 @@ static void kernel_handle_request(void) {
 			}
 
 			/* If cur is RR, it might be pre-empted by a new PERIODIC. */
-			if (cur_task->level == RR && kernel_request_create_args.level
+			if (cur_task->level == BRR && kernel_request_create_args.level
 					== PERIODIC && PPP[slot_name_index]
 					== kernel_request_create_args.name) {
 				cur_task->state = READY;
 			}
 
 			/* enqueue READY RR tasks. */
-			if (cur_task->level == RR && cur_task->state == READY) {
+			if (cur_task->level == BRR && cur_task->state == READY) {
 				enqueue(&rr_queue, cur_task);
 			}
 		}
@@ -262,7 +262,7 @@ static void kernel_handle_request(void) {
 			slot_task_finished = 1;
 			break;
 
-		case RR:
+		case BRR:
 			enqueue(&rr_queue, cur_task);
 			break;
 
@@ -710,7 +710,7 @@ static int kernel_create_task() {
 		enqueue(&system_queue, p);
 		break;
 
-	case RR:
+	case BRR:
 		/* Put SYSTEM and Round Robin tasks on a queue. */
 		enqueue(&rr_queue, p);
 		break;
@@ -789,7 +789,7 @@ static void kernel_event_signal(uint8_t is_broadcast, uint8_t and_next) {
 				break;
 			case PERIODIC:
 				break;
-			case RR:
+			case BRR:
 				enqueue(&rr_queue, task_ptr);
 				break;
 			default:
@@ -800,7 +800,7 @@ static void kernel_event_signal(uint8_t is_broadcast, uint8_t and_next) {
 			if (cur_task != idle_task && !make_ready) {
 				if (cur_task->level != SYSTEM && task_ptr->level == SYSTEM) {
 					make_ready = 1;
-				} else if (cur_task->level == RR && PT > 0
+				} else if (cur_task->level == BRR && PT > 0
 						&& slot_task_finished == 0 && task_ptr
 						== name_to_task_ptr[PPP[slot_name_index]]) {
 					make_ready = 1;
@@ -814,7 +814,7 @@ static void kernel_event_signal(uint8_t is_broadcast, uint8_t and_next) {
 
 		if (make_ready && cur_task != idle_task) {
 			cur_task->state = READY;
-			if (cur_task->level == RR) {
+			if (cur_task->level == BRR) {
 				enqueue(&rr_queue, cur_task);
 			}
 		}
@@ -988,7 +988,7 @@ static void kernel_update_ticker(void) {
 				break;
 			case PERIODIC:
 				break;
-			case RR:
+			case BRR:
 				enqueue(&rr_queue, task_ptr);
 				break;
 			default:
@@ -998,7 +998,7 @@ static void kernel_update_ticker(void) {
 			if (cur_task != idle_task && !make_ready) {
 				if (cur_task->level != SYSTEM && task_ptr->level == SYSTEM) {
 					make_ready = 1;
-				} else if (cur_task->level == RR && PT > 0
+				} else if (cur_task->level == BRR && PT > 0
 						&& slot_task_finished == 0 && task_ptr
 						== name_to_task_ptr[PPP[slot_name_index]]) {
 					make_ready = 1;
@@ -1010,7 +1010,7 @@ static void kernel_update_ticker(void) {
 		}
 		if (make_ready && cur_task != idle_task) {
 			cur_task->state = READY;
-			if (cur_task->level == RR) {
+			if (cur_task->level == BRR) {
 				enqueue(&rr_queue, cur_task);
 			}
 		}
