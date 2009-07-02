@@ -379,6 +379,9 @@ void  Broadcast_And_Next( EVENT *e );
 unsigned int Now();
 
 
+void Task_Sleep(unsigned int t);
+
+
 /** Voluntarily relinquish the processor by a BRR task and specify its
   * next quantum required, where 0 <= n <= MAXQUANTUM
   */

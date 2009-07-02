@@ -122,6 +122,7 @@ static void kernel_update_ticker(void);
 static void check_PPP_names(void);
 static void idle(void);
 static void _delay_25ms(void);
+static void preempt(void);
 
 /* sleeping */
 static void kernel_sleep_task(void);
@@ -213,9 +214,8 @@ static void kernel_handle_request(void) {
 		kernel_update_ticker();
 
 		/* Round robin tasks get pre-empted on every tick. */
-		if (cur_task->level == BRR && cur_task->state == RUNNING) {
-			cur_task->state = READY;
-			enqueue(&rr_queue, cur_task);
+		if (cur_task->level == BRR) {
+            preempt();
 		}
 		break;
 
@@ -225,23 +225,17 @@ static void kernel_handle_request(void) {
 		/* Check if new task has higer priority, and that it wasn't an ISR
 		 * making the request.
 		 */
-		if (kernel_request_retval) {
+		if (kernel_request_retval)
+        {
 			/* If new task is SYSTEM and cur is not, then don't run old one */
-			if (kernel_request_create_args.level == SYSTEM && cur_task->level
-					!= SYSTEM) {
-				cur_task->state = READY;
-			}
-
+			if ((kernel_request_create_args.level == SYSTEM &&
+                cur_task->level != SYSTEM) ||
 			/* If cur is RR, it might be pre-empted by a new PERIODIC. */
-			if (cur_task->level == BRR && kernel_request_create_args.level
-					== PERIODIC && PPP[slot_name_index]
-					== kernel_request_create_args.name) {
-				cur_task->state = READY;
-			}
-
-			/* enqueue READY RR tasks. */
-			if (cur_task->level == BRR && cur_task->state == READY) {
-				enqueue(&rr_queue, cur_task);
+               (cur_task->level == BRR &&
+                kernel_request_create_args.level == PERIODIC &&
+                PPP[slot_name_index] == kernel_request_create_args.name))
+            {
+                preempt();
 			}
 		}
 		break;
@@ -253,25 +247,13 @@ static void kernel_handle_request(void) {
 		break;
 
 	case TASK_NEXT:
-		switch (cur_task->level) {
-		case SYSTEM:
-			enqueue(&system_queue, cur_task);
-			break;
-
-		case PERIODIC:
+        if (cur_task->level == PERIODIC)
+        {
 			slot_task_finished = 1;
-			break;
+        }
 
-		case BRR:
-			enqueue(&rr_queue, cur_task);
-			break;
-
-		default: /* idle_task */
-			break;
-		}
-
-		cur_task->state = READY;
-		break;
+        preempt();
+        break;
 
 	case TASK_GET_ARG:
 		/* Should not happen. Handled in task itself. */
@@ -813,10 +795,7 @@ static void kernel_event_signal(uint8_t is_broadcast, uint8_t and_next) {
 		}
 
 		if (make_ready && cur_task != idle_task) {
-			cur_task->state = READY;
-			if (cur_task->level == BRR) {
-				enqueue(&rr_queue, cur_task);
-			}
+            preempt();
 		}
 	}
 }
@@ -1009,10 +988,7 @@ static void kernel_update_ticker(void) {
 			}
 		}
 		if (make_ready && cur_task != idle_task) {
-			cur_task->state = READY;
-			if (cur_task->level == BRR) {
-				enqueue(&rr_queue, cur_task);
-			}
+            preempt();
 		}
 	}
 }
@@ -1122,14 +1098,38 @@ void OS_Init() {
 			kernel_main_loop();
 		}
 
-	/**
-	 *  @brief Delay function adapted from <util/delay.h>
-	 */
+/**
+ *  @brief Delay function adapted from <util/delay.h>
+ */
 static void _delay_25ms(void) {
 	uint16_t i;
 
 	/* 4 * 50000 CPU cycles = 25 ms */
 	asm volatile ("1: sbiw %0,1" "\n\tbrne 1b" : "=w" (i) : "0" (50000));
+}
+
+/**
+ * @brief Helper function which preempts the current task
+ */
+static void preempt(void)
+{
+    if (cur_task->state == RUNNING)
+    {
+        cur_task->state = READY;
+
+        switch (cur_task->level) {
+        case SYSTEM:
+            enqueue(&system_queue, cur_task);
+            break;
+
+        case BRR:
+            enqueue(&rr_queue, cur_task);
+            break;
+
+        default:
+            break;
+        }
+    }
 }
 
 /** @brief Abort the execution of this RTOS due to an unrecoverable erorr.
@@ -1396,7 +1396,12 @@ void Broadcast_And_Next(EVENT *e) {
  * This number will wrap around using 2's compliment if it is greater than the size of integer available.
  */
 unsigned int Now() {
-	return cur_ticks;
+	uint8_t sreg;
+	sreg = SREG;
+	Disable_Interrupt();
+    unsigned int cur_ticks_sample = cur_ticks;
+	SREG = sreg;
+	return cur_ticks_sample;
 }
 
 void Task_Sleep(unsigned int t) {
