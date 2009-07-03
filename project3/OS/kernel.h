@@ -43,7 +43,7 @@ typedef void (*voidfuncvoid_ptr)(void); /* pointer to void f(void) */
  * @brief This is the set of states that a task can be in at any given time.
  */
 typedef enum {
-	DEAD = 0, RUNNING, READY, WAITING, SLEEPING
+	DEAD = 0, RUNNING, READY, WAITING, LOCKING, SLEEPING
 } task_state_t;
 
 /**
@@ -62,7 +62,10 @@ typedef enum {
 	EVENT_SIGNAL,
 	EVENT_BROADCAST,
 	EVENT_SIGNAL_AND_NEXT,
-	EVENT_BROADCAST_AND_NEXT
+	EVENT_BROADCAST_AND_NEXT,
+    MUTEX_INIT,
+    MUTEX_LOCK,
+    MUTEX_UNLOCK
 } kernel_request_t;
 
 /**
@@ -102,7 +105,8 @@ struct td_struct {
 	task_descriptor_t* sleep_next;
 	/** The number of ticks remaining after the previous item in the queue is released. If it is the first item in the queue it is the number of ticks until it is released. */
 	unsigned int diff_ticks_remaining;
-
+    /** When a task is put onto a queue waiting to lock a mutex, the tick limit is kept here. */
+    unsigned int mutex_lock_tick_limit;
 };
 
 /**
@@ -114,6 +118,22 @@ typedef struct {
 	/** The last item in the queue. Undefined if the queue is empty. */
 	task_descriptor_t* tail;
 } queue_t;
+
+/**
+ * @brief All of the state required for a mutex.
+ */
+typedef struct {
+    /** The number of times the mutex must be unlocked to free the mutex. */
+    unsigned int count;
+    /** The current owner of the mutex. */
+    task_descriptor_t* owner;
+	/** The priority (type) of the owner before it locked the mutex. */
+	uint8_t owner_level;
+    /** The time remaining before the owner must unlock the mutex. */
+    unsigned int ticks_remaining;
+    /** The queue of tasks waiting to lock the mutex. */
+    queue_t locking_queue;
+} mutex_t;
 
 #endif
 

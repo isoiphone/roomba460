@@ -53,6 +53,12 @@ static volatile int kernel_request_retval;
 /** Argument and return value for Event class of requests. */
 static volatile EVENT* kernel_request_event_ptr;
 
+/** Argument and return value for Mutex class of requests. */
+static volatile MUTEX* kernel_request_mutex_ptr;
+
+/** Argument for Mutex_Lock request. */
+static volatile unsigned int kernel_request_mutex_lock_n;
+
 /** Argument for adding sleeping tasks */
 static volatile unsigned int kernal_request_sleep_ticks;
 
@@ -62,6 +68,9 @@ static queue_t dead_pool_queue;
 /** Number of events created so far */
 static uint8_t num_events_created = 0;
 
+/** Number of mutexes created so far */
+static uint8_t num_mutexes_created = 0;
+
 /** The ready queue for RR tasks. Their scheduling is round-robin. */
 static queue_t rr_queue;
 
@@ -70,6 +79,9 @@ static queue_t system_queue;
 
 /** An array of queues for tasks waiting on events. */
 static queue_t event_queue[MAXEVENT];
+
+/** An array of mutexes. */
+static mutex_t mutexes[MAXMUTEX];
 
 /** A queue that holds the list of sleeping tasks. This queue is ordered by the amount of time remaining in the sleep */
 static queue_t sleep_queue;
@@ -111,8 +123,10 @@ static void kernel_terminate_task(void);
 /* events */
 static void kernel_event_wait(void);
 static void kernel_event_signal(uint8_t is_broadcast, uint8_t and_next);
+/* mutexes */
+static void kernel_mutex_lock(task_descriptor_t* task, mutex_t* mutex, unsigned int n);
+static void kernel_mutex_unlock(mutex_t* mutex);
 /* queues */
-
 static void enqueue(queue_t* queue_ptr, task_descriptor_t* task_to_add);
 static task_descriptor_t* dequeue(queue_t* queue_ptr);
 static void sleep_enqueue(queue_t*, task_descriptor_t*);
@@ -217,6 +231,7 @@ static void kernel_handle_request(void) {
 		if (cur_task->level == BRR) {
             preempt();
 		}
+
 		break;
 
 	case TASK_CREATE:
@@ -310,12 +325,58 @@ static void kernel_handle_request(void) {
 
 		kernel_event_signal(1 /* is broadcast */, 1 /* is task_next */);
 		break;
+
 	case TASK_SLEEP:
 		/* idle_task does not sleep. */
 		if (cur_task != idle_task) {
 			kernel_sleep_task();
 		}
 		break;
+
+	case MUTEX_INIT:
+		if (num_mutexes_created < MAXMUTEX)
+        {
+			/* Pass a number back to the task, but pretend it is a pointer.
+			 * It is the index of the mutex plus 1. */
+			++num_mutexes_created;
+			kernel_request_mutex_ptr = (MUTEX *) (uint16_t) (num_mutexes_created);
+		}
+        else
+        {
+            /* (0 is the return value for failure) */
+			kernel_request_mutex_ptr = (MUTEX *) (uint16_t) 0;
+		}
+		break;
+
+	case MUTEX_LOCK:
+        /* Check the handle of the mutex to ensure that it is initialized. */
+        uint8_t handle = (uint8_t) ((uint16_t) (kernel_request_mutex_ptr) - 1);
+
+        if (handle >= num_mutexes_created) {
+            /* Error code. */
+            error_msg = ERR_RUN_5_WAIT_ON_BAD_EVENT;
+            OS_Abort();
+        } else if (cur_task->level == PERIODIC) {
+            error_msg = ERR_RUN_7_PERIODIC_CALLED_WAIT;
+            OS_Abort();
+        } else {
+            kernel_mutex_lock(cur_task, &mutexes[handle], kernel_request_mutex_lock_n);
+        }
+		break;
+
+	case MUTEX_UNLOCK:
+        /* Check the handle of the mutex to ensure that it is initialized. */
+        uint8_t handle = (uint8_t) ((uint16_t) (kernel_request_mutex_ptr) - 1);
+
+        if (handle >= num_mutexes_created) {
+            /* Error code. */
+            error_msg = ERR_RUN_4_SIGNAL_ON_BAD_EVENT;
+            OS_Abort();
+        } else {
+            kernel_mutex_unlock(&mutexes[handle]);
+        }
+		break;
+
 	default:
 		/* Should never happen */
 		error_msg = ERR_RUN_8_RTOS_INTERNAL_ERROR;
@@ -800,6 +861,66 @@ static void kernel_event_signal(uint8_t is_broadcast, uint8_t and_next) {
 	}
 }
 
+/**
+ * @brief Kernel function to lock a mutex.
+ *
+ * May cause task to be suspended.
+ */
+static void kernel_mutex_lock(task_descriptor_t* task, mutex_t* mutex, unsigned int n)
+{
+    if (mutex->count == 0)
+    {
+        mutex->count += 1;
+        mutex->owner = task;
+        mutex->owner_level = task->level;
+        mutex->ticks_remaining = n;
+        task->level = SYSTEM;
+    }
+    else
+    {
+        if (mutex->owner == task)
+        {
+            mutex->count += 1;
+        }
+        else
+        {
+            task->state = LOCKING;
+            task->mutex_lock_tick_limit = n;
+            enqueue(&(mutex->queue), task);
+        }
+    }
+}
+
+/**
+ * @brief Kernel function to unlock a mutex.
+ */
+static void kernel_mutex_unlock(mutex_t* mutex)
+{
+    if (mutex->count > 0 && mutex->owner == cur_task)
+    {
+        mutex->count -= 1;
+
+        if (mutex->count == 0)
+        {
+            cur_task->level = mutex->owner_level;
+
+            if (mutex->queue.head != NULL)
+            {
+                task_descriptor_t* task_ptr = dequeue(&(mutex->queue));
+                kernel_mutex_lock(task_ptr, mutex, task_ptr->mutex_lock_tick_limit);
+                task_ptr->state = READY;
+                enqueue(&system_queue, task_ptr);
+            }
+
+            if (cur_task->level != SYSTEM && (system_queue.head != NULL ||
+            (!slot_task_finished && PT > 0 && name_to_task_ptr[PPP[slot_name_index]] != NULL)))
+            {
+                preempt();
+            }
+        }
+    }
+}
+
 static void kernel_sleep_task(void) {
 	/* Periodic tasks cannot sleep */
 	if (cur_task->level == PERIODIC) {
@@ -951,6 +1072,25 @@ static void kernel_update_ticker(void) {
 			}
 		}
 	}
+
+    int i;
+
+    for (i = 0; i < num_mutexes_created; ++i)
+    {
+        mutex_t* mutex = &mutexes[i];
+
+        if (mutex->count > 0)
+        {
+            mutex->ticks_remaining -= 1;
+
+            if (mutex->ticks_remaining == 0)
+            {
+				/* error handling */
+				error_msg = ERR_RUN_3_PERIODIC_TOOK_TOO_LONG;
+				OS_Abort();
+            }
+        }
+    }
 
 	/* Check sleeping tasks */
 	if (sleep_queue.head != NULL) {
@@ -1411,6 +1551,66 @@ void Task_Sleep(unsigned int t) {
 	kernel_request = TASK_SLEEP;
 	kernal_request_sleep_ticks = t;
 	enter_kernel();
+	SREG = sreg;
+}
+
+/**
+ * @brief Initialize a new, non-NULL Mutex descriptor.
+ *
+ * @return a non-NULL Mutex descriptor if successful; NULL otherwise.
+ */
+MUTEX *Mutex_Init(void) {
+	MUTEX* mutex_ptr;
+	uint8_t sreg;
+
+	sreg = SREG;
+	Disable_Interrupt();
+
+	kernel_request = MUTEX_INIT;
+	enter_kernel();
+
+	mutex_ptr = (MUTEX *) kernel_request_mutex_ptr;
+
+	SREG = sreg;
+
+	return mutex_ptr;
+}
+
+/**
+ * @brief Locks a mutex.
+ *
+ * @param m  a Mutex descriptor
+ * @param n  maximum ticks to lock mutex
+ */
+void Mutex_Lock( MUTEX *m, unsigned int n ) {
+	uint8_t sreg;
+
+	sreg = SREG;
+	Disable_Interrupt();
+
+	kernel_request = MUTEX_LOCK;
+	kernel_request_mutex_ptr = m;
+    kernel_request_mutex_lock_n = n;
+	enter_kernel();
+
+	SREG = sreg;
+}
+
+/**
+ * @brief Unlocks a mutex.
+ *
+ * @param m  a Mutex descriptor
+ */
+void Mutex_Unlock( MUTEX *m ) {
+	uint8_t sreg;
+
+	sreg = SREG;
+	Disable_Interrupt();
+
+	kernel_request = MUTEX_UNLOCK;
+	kernel_request_mutex_ptr = m;
+	enter_kernel();
+
 	SREG = sreg;
 }
 
