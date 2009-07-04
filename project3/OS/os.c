@@ -141,7 +141,7 @@ static void kernel_update_ticker(void);
 static void check_PPP_names(void);
 static void idle(void);
 static void _delay_25ms(void);
-static void preempt(void);
+static void preempt(uint8_t called_task_next);
 
 /* sleeping */
 static void kernel_sleep_task(void);
@@ -288,7 +288,7 @@ static void kernel_handle_request(void) {
 
             if (quantum_remaining == 0)
             {
-                preempt();
+                preempt(0);
             }
 		}
 
@@ -310,7 +310,7 @@ static void kernel_handle_request(void) {
                 kernel_request_create_args.level == PERIODIC &&
                 PPP[slot_name_index] == kernel_request_create_args.name))
             {
-                preempt();
+                preempt(0);
 			}
 		}
 		break;
@@ -327,7 +327,7 @@ static void kernel_handle_request(void) {
 			slot_task_finished = 1;
         }
 
-        preempt();
+        preempt(1);
         break;
 
 	case TASK_GET_ARG:
@@ -928,7 +928,7 @@ static void kernel_event_signal(uint8_t is_broadcast, uint8_t and_next) {
 		}
 
 		if (make_ready && cur_task != idle_task) {
-            preempt();
+            preempt(0);
 		}
 	}
 }
@@ -987,7 +987,7 @@ static void kernel_mutex_unlock(mutex_t* mutex)
             if (cur_task->level != SYSTEM && (system_queue.head != NULL ||
             (!slot_task_finished && PT > 0 && name_to_task_ptr[PPP[slot_name_index]] != NULL)))
             {
-                preempt();
+                preempt(0);
             }
         }
     }
@@ -1161,7 +1161,7 @@ static void kernel_update_ticker(void) {
 
                 if (cur_task->level == BRR)
                 {
-                    preempt();
+                    preempt(0);
                 }
 			}
 		}
@@ -1222,7 +1222,7 @@ static void kernel_update_ticker(void) {
 			}
 		}
 		if (make_ready && cur_task != idle_task) {
-            preempt();
+            preempt(0);
 		}
 	}
 }
@@ -1345,7 +1345,7 @@ static void _delay_25ms(void) {
 /**
  * @brief Helper function which preempts the current task
  */
-static void preempt(void)
+static void preempt(uint8_t called_task_next)
 {
     if (cur_task->state == RUNNING)
     {
@@ -1357,7 +1357,7 @@ static void preempt(void)
             break;
 
         case BRR:
-		    if (cur_task->requested_quantum == 0)
+		    if (cur_task->requested_quantum == 0 && !called_task_next)
             {
                 add_to_queue_front(&rr_queue, cur_task);
             }
