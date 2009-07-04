@@ -48,10 +48,10 @@ int main(void)
     set_test(115);
 
     mutex = Mutex_Init();
+	print_event = Event_Init();
 
    	Task_Create(brr_task, 0, BRR, 0);
-	
-    print_event = Event_Init();    
+    
     Event_Wait(print_event);
     print_trace();
 }

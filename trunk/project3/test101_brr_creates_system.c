@@ -16,17 +16,17 @@ const unsigned char PPP[] = {};
 const unsigned int PT = sizeof(PPP)/2;
 EVENT* print_event;
 
+void system_task(void)
+{
+    add_to_trace(2);
+}
+
 void brr_task(void)
 {
     add_to_trace(1);
    	Task_Create(system_task, 0, SYSTEM, 0);
     add_to_trace(3);
     Event_Signal(print_event);
-}
-
-void system_task(void)
-{
-    add_to_trace(2);
 }
 
 int main(void)
