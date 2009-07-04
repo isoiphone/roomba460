@@ -809,7 +809,7 @@ static int kernel_create_task() {
 
     if (n > MAXQUANTUM)
     {
-        n = MAXQUANTUM
+        n = MAXQUANTUM;
     }
 
 	p->requested_quantum = n;
@@ -1491,7 +1491,7 @@ void Task_Next_Quantum(unsigned int n) {
 
     if (n > MAXQUANTUM)
     {
-        n = MAXQUANTUM
+        n = MAXQUANTUM;
     }
 
     cur_task->requested_quantum = n;
