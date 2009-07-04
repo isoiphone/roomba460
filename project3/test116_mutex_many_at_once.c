@@ -68,6 +68,7 @@ int main(void)
 	uart_init();
 	uart_write((uint8_t*)"\r\nSTART\r\n", 9);
     set_test(116);
+	print_event = Event_Init();
 
     mutex1 = Mutex_Init();
     mutex2 = Mutex_Init();
@@ -76,7 +77,6 @@ int main(void)
    	Task_Create(system_task_2, 0, SYSTEM, 0);
    	Task_Create(system_task_3, 0, SYSTEM, 0);
 	
-    print_event = Event_Init();    
     Event_Wait(print_event);
     print_trace();
 }
