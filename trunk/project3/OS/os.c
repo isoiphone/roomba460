@@ -334,6 +334,7 @@ static void kernel_handle_request(void) {
 		break;
 
 	case MUTEX_INIT:
+	{
 		if (num_mutexes_created < MAXMUTEX)
         {
 			/* Pass a number back to the task, but pretend it is a pointer.
@@ -347,8 +348,9 @@ static void kernel_handle_request(void) {
 			kernel_request_mutex_ptr = (MUTEX *) (uint16_t) 0;
 		}
 		break;
-
+	}
 	case MUTEX_LOCK:
+	{
         /* Check the handle of the mutex to ensure that it is initialized. */
         uint8_t handle = (uint8_t) ((uint16_t) (kernel_request_mutex_ptr) - 1);
 
@@ -363,8 +365,9 @@ static void kernel_handle_request(void) {
             kernel_mutex_lock(cur_task, &mutexes[handle], kernel_request_mutex_lock_n);
         }
 		break;
-
+	}
 	case MUTEX_UNLOCK:
+	{
         /* Check the handle of the mutex to ensure that it is initialized. */
         uint8_t handle = (uint8_t) ((uint16_t) (kernel_request_mutex_ptr) - 1);
 
@@ -376,7 +379,7 @@ static void kernel_handle_request(void) {
             kernel_mutex_unlock(&mutexes[handle]);
         }
 		break;
-
+	}
 	default:
 		/* Should never happen */
 		error_msg = ERR_RUN_8_RTOS_INTERNAL_ERROR;
@@ -886,7 +889,7 @@ static void kernel_mutex_lock(task_descriptor_t* task, mutex_t* mutex, unsigned 
         {
             task->state = LOCKING;
             task->mutex_lock_tick_limit = n;
-            enqueue(&(mutex->queue), task);
+            enqueue(&(mutex->locking_queue), task);
         }
     }
 }
@@ -904,9 +907,9 @@ static void kernel_mutex_unlock(mutex_t* mutex)
         {
             cur_task->level = mutex->owner_level;
 
-            if (mutex->queue.head != NULL)
+            if (mutex->locking_queue.head != NULL)
             {
-                task_descriptor_t* task_ptr = dequeue(&(mutex->queue));
+                task_descriptor_t* task_ptr = dequeue(&(mutex->locking_queue));
                 kernel_mutex_lock(task_ptr, mutex, task_ptr->mutex_lock_tick_limit);
                 task_ptr->state = READY;
                 enqueue(&system_queue, task_ptr);
