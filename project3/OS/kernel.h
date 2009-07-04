@@ -107,6 +107,8 @@ struct td_struct {
 	unsigned int diff_ticks_remaining;
     /** When a task is put onto a queue waiting to lock a mutex, the tick limit is kept here. */
     unsigned int mutex_lock_tick_limit;
+    /** The quantum requested by a BRR task (either initially or with Task_Next_Quantum(). */
+    unsigned int requested_quantum;
 };
 
 /**
