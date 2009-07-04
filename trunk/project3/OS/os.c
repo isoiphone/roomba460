@@ -71,6 +71,9 @@ static uint8_t num_events_created = 0;
 /** Number of mutexes created so far */
 static uint8_t num_mutexes_created = 0;
 
+/** The time remaining before the BRR task must be preempted. */
+static unsigned int quantum_remaining;
+
 /** The ready queue for RR tasks. Their scheduling is round-robin. */
 static queue_t rr_queue;
 
@@ -111,6 +114,7 @@ static unsigned int cur_ticks = 0;
 /* kernel */
 static void kernel_main_loop(void);
 static void kernel_dispatch(void);
+static int brr_task_can_be_scheduled(unsigned int requested_quantum);
 static void kernel_handle_request(void);
 /* context switching */
 static void exit_kernel(void) __attribute((noinline, naked));
@@ -128,6 +132,7 @@ static void kernel_mutex_lock(task_descriptor_t* task, mutex_t* mutex, unsigned 
 static void kernel_mutex_unlock(mutex_t* mutex);
 /* queues */
 static void enqueue(queue_t* queue_ptr, task_descriptor_t* task_to_add);
+static void add_to_queue_front(queue_t* queue_ptr, task_descriptor_t* task_to_add);
 static task_descriptor_t* dequeue(queue_t* queue_ptr);
 static void sleep_enqueue(queue_t*, task_descriptor_t*);
 static task_descriptor_t* sleep_dequeue(queue_t*);
@@ -192,22 +197,72 @@ static void kernel_dispatch(void) {
 	 * kernel_handle_request() has already determined it should be selected.
 	 */
 
-	if (cur_task->state != RUNNING || cur_task == idle_task) {
-		if (system_queue.head != NULL) {
+	if (cur_task->state != RUNNING || cur_task == idle_task)
+    {
+        cur_task = idle_task;
+
+		if (system_queue.head != NULL)
+        {
 			cur_task = dequeue(&system_queue);
-		} else if (!slot_task_finished && PT > 0
-				&& name_to_task_ptr[PPP[slot_name_index]] != NULL) {
-			/* Keep running the current PERIODIC task. */
+		}
+        else if (!slot_task_finished && PT > 0 &&
+                 name_to_task_ptr[PPP[slot_name_index]] != NULL)
+        {
 			cur_task = name_to_task_ptr[PPP[slot_name_index]];
-		} else if (rr_queue.head != NULL) {
-			cur_task = dequeue(&rr_queue);
-		} else {
-			/* No task available, so idle. */
-			cur_task = idle_task;
+		}
+        else if (rr_queue.head != NULL)
+        {
+            task_descriptor_t* first_task_checked = NULL;
+            task_descriptor_t* next = NULL;
+
+            while (first_task_checked != rr_queue.head)
+            {
+                if (first_task_checked == NULL)
+                {
+                    first_task_checked = rr_queue.head;
+                }
+
+                next = dequeue(&rr_queue);
+
+                if (brr_task_can_be_scheduled(next->requested_quantum))
+                {
+                    cur_task = next;
+                    quantum_remaining = cur_task->requested_quantum;
+                    break;
+                }
+
+                enqueue(&rr_queue, next);
+            }
 		}
 
 		cur_task->state = RUNNING;
 	}
+}
+
+static int brr_task_can_be_scheduled(unsigned int requested_quantum)
+{
+    if (requested_quantum == 0 || PT == 0)
+    {
+        return 1;
+    }
+    else
+    {
+        unsigned int time_before_next_periodic_task = ticks_remaining;
+        int i = (slot_name_index + 2) % (2 * PT);
+
+        while (i != slot_name_index)
+        {
+            if (PPP[i] != IDLE && name_to_task_ptr[PPP[i]] != NULL)
+            {
+                break;
+            }
+
+            time_before_next_periodic_task += PPP[i + 1];
+            i = (i + 2) % (2 * PT);
+        }
+
+        return requested_quantum <= time_before_next_periodic_task;
+    }
 }
 
 /**
@@ -227,9 +282,14 @@ static void kernel_handle_request(void) {
 	case TIMER_EXPIRED:
 		kernel_update_ticker();
 
-		/* Round robin tasks get pre-empted on every tick. */
-		if (cur_task->level == BRR) {
-            preempt();
+		if (cur_task->level == BRR && cur_task->requested_quantum != 0)
+        {
+            quantum_remaining -= 1;
+
+            if (quantum_remaining == 0)
+            {
+                preempt();
+            }
 		}
 
 		break;
@@ -745,6 +805,15 @@ static int kernel_create_task() {
 	p->level = kernel_request_create_args.level;
 	p->name = kernel_request_create_args.name;
 
+    unsigned int n = kernel_request_create_args.name;
+
+    if (n > MAXQUANTUM)
+    {
+        n = MAXQUANTUM
+    }
+
+	p->requested_quantum = n;
+
 	switch (kernel_request_create_args.level) {
 	case PERIODIC:
 		/* Put this newly created PPP task into the PPP lookup array */
@@ -941,7 +1010,7 @@ static void kernel_sleep_task(void) {
  */
 
 /**
- * @brief Add a task the head of the queue
+ * @brief Add a task the end of the queue
  *
  * @param queue_ptr the queue to insert in
  * @param task_to_add the task descriptor to add
@@ -956,6 +1025,23 @@ static void enqueue(queue_t* queue_ptr, task_descriptor_t* task_to_add) {
 	} else {
 		/* put task at the back of the queue */
 		queue_ptr->tail->next = task_to_add;
+		queue_ptr->tail = task_to_add;
+	}
+}
+
+/**
+ * @brief Add a task the head of the queue
+ *
+ * @param queue_ptr the queue to insert in
+ * @param task_to_add the task descriptor to add
+ */
+static void add_to_queue_front(queue_t* queue_ptr, task_descriptor_t* task_to_add)
+{
+    task_to_add->next = queue_ptr->head;
+    queue_ptr->head = task_to_add;
+
+	if (task_to_add->next == NULL)
+    {
 		queue_ptr->tail = task_to_add;
 	}
 }
@@ -1072,6 +1158,11 @@ static void kernel_update_ticker(void) {
 				slot_task_finished = 1;
 			} else {
 				slot_task_finished = 0;
+
+                if (cur_task->level == BRR)
+                {
+                    preempt();
+                }
 			}
 		}
 	}
@@ -1266,7 +1357,15 @@ static void preempt(void)
             break;
 
         case BRR:
-            enqueue(&rr_queue, cur_task);
+		    if (cur_task->requested_quantum == 0)
+            {
+                add_to_queue_front(&rr_queue, cur_task);
+            }
+            else
+            {
+                enqueue(&rr_queue, cur_task);
+            }
+
             break;
 
         default:
@@ -1374,6 +1473,28 @@ void Task_Next() {
 	sreg = SREG;
 	Disable_Interrupt();
 
+	kernel_request = TASK_NEXT;
+	enter_kernel();
+
+	SREG = sreg;
+}
+
+/**
+ * @brief The calling BRR task gives up its share of the processor voluntarily
+ *        and specifies its desired quantum for the next time its scheduled.
+ */
+void Task_Next_Quantum(unsigned int n) {
+	uint8_t volatile sreg;
+
+	sreg = SREG;
+	Disable_Interrupt();
+
+    if (n > MAXQUANTUM)
+    {
+        n = MAXQUANTUM
+    }
+
+    cur_task->requested_quantum = n;
 	kernel_request = TASK_NEXT;
 	enter_kernel();
 
