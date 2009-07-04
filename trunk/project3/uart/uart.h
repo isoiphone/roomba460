@@ -17,7 +17,7 @@
 
 #include "../OS/common.h"
 
-#define BAUD            38400
+#define BAUD            9600
 
 #define UART_TX_BUF_MASK    255
 
