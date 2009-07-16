@@ -27,6 +27,11 @@ class Roomba:
     m_angle = 0.
     m_distance = 0.
     
+    "manually place the roomba in some starting position facing some direction"
+    def place(self, position, heading):
+        self.m_position = position
+        self.m_heading = heading
+        
     """
     send drive command to roomba
     units are mm/s and mm, negative radius means clockwise
@@ -97,17 +102,40 @@ class Roomba:
         y2 = math.sin(self.m_heading+math.pi/4.0)*kRoombaRadius*kMillimetersToPixels
         pygame.draw.line(screen, kClrBumper, (pos[0]+x1,pos[1]+y1), (pos[0]+x2,pos[1]+y2), 2)
     
+    
 class Simulation:
-    m_roomba = Roomba()
+    m_roomba1 = Roomba()
+    m_roomba2 = Roomba()
+    
+    m_curTimeMs = 0.
+    
+    m_curState = 0
     
     def start(self):
-        self.m_roomba.drive(kRoombaRadius*2.0, 500)
+        center = [int((kScreenSize[0]/2.)/kMillimetersToPixels),int((kScreenSize[1]/2.)/kMillimetersToPixels)]
+        
+        # start back-to-back in the center
+        self.m_roomba1.place([center[0]-kRoombaRadius, center[1]], math.pi)
+        self.m_roomba2.place([center[0]+kRoombaRadius, center[1]], 0)
+        
+        # just one spiraling
+        self.m_roomba1.drive(kRoombaRadius*8.0, 500)
+        self.m_curState = 1
     
     def update(self, elapsedMs):
-        self.m_roomba.update(elapsedMs)
+        self.m_curTimeMs += elapsedMs
+        
+        # after 1 second of just one spiraling, get the other spiraling too
+        if self.m_curState == 1 and self.m_curTimeMs > 1000:
+            self.m_roomba2.drive(kRoombaRadius*8.0, 500)
+            self.m_curState = 2
+            
+        self.m_roomba1.update(elapsedMs)
+        self.m_roomba2.update(elapsedMs)
     
     def draw(self, screen):
-        self.m_roomba.draw(screen)
+        self.m_roomba1.draw(screen)
+        self.m_roomba2.draw(screen)
     
 def main():
     random.seed()
