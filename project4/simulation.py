@@ -17,7 +17,7 @@ kRoombaWheelSpacing = 258. # 258mm between wheels says the SCI spec document
 class Roomba:
     "current position / heading"
     m_velocity = 0.
-    m_radius = 0.
+    m_radius = 100*1000*1000.
     
     "actual position in cm"
     m_position = [int((kScreenSize[0]/2.)/kMillimetersToPixels),int((kScreenSize[1]/2.)/kMillimetersToPixels)]
@@ -101,7 +101,7 @@ class Simulation:
     m_roomba = Roomba()
     
     def start(self):
-        self.m_roomba.drive(kRoombaRadius*2.0, 0)
+        self.m_roomba.drive(kRoombaRadius*2.0, 500)
     
     def update(self, elapsedMs):
         self.m_roomba.update(elapsedMs)
@@ -121,6 +121,7 @@ def main():
     pygame.display.update()
 
     simulation = Simulation()
+    simulation.start()
     
     while 1:
         event = pygame.event.poll()
