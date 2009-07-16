@@ -97,6 +97,17 @@ class Roomba:
         y2 = math.sin(self.m_heading+math.pi/4.0)*kRoombaRadius*kMillimetersToPixels
         pygame.draw.line(screen, kClrBumper, (pos[0]+x1,pos[1]+y1), (pos[0]+x2,pos[1]+y2), 2)
     
+class Simulation:
+    m_roomba = Roomba()
+    
+    def start(self):
+        self.m_roomba.drive(kRoombaRadius*2.0, 0)
+    
+    def update(self, elapsedMs):
+        self.m_roomba.update(elapsedMs)
+    
+    def draw(self, screen):
+        self.m_roomba.draw(screen)
     
 def main():
     random.seed()
@@ -109,19 +120,17 @@ def main():
     screen.fill(kClrBlack)
     pygame.display.update()
 
-    roomba = Roomba()
-    roomba.drive(kRoombaRadius*2.0, 0)
-    #roomba.drive(500, 0)
+    simulation = Simulation()
     
     while 1:
         event = pygame.event.poll()
         if event.type == QUIT:
             break
         
-        roomba.update(clock.get_time())
+        simulation.update(clock.get_time())
         
         screen.fill(kClrBlack)
-        roomba.draw(screen)
+        simulation.draw(screen)
         
         pygame.display.update()
         clock.tick(kFramesPerSecond)
