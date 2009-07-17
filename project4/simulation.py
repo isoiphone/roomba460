@@ -14,6 +14,8 @@ kMillimetersToPixels = 1.0 / 10.0 # 10mm per pixel, aka 100 pixel per meter
 kRoombaRadius = 170. # 34 cm in diameter says wiki, so 34/2 radius.
 kRoombaWheelSpacing = 258. # 258mm between wheels says the SCI spec document
 
+
+
 class Roomba:
     "current position / heading"
     m_velocity = 0.
@@ -107,8 +109,11 @@ class Simulation:
     m_roomba1 = Roomba()
     m_roomba2 = Roomba()
     
-    m_curTimeMs = 0.
+    # a plan is a series of steps
+    # each step is a precondition, velocity, radius, and duration.
     
+    #m_plan = []
+    m_curTimeMs = 0.
     m_curState = 0
     
     def start(self):
