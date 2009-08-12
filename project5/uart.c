@@ -1,106 +1,109 @@
 /**
  * @file   uart.c
- *
- * @brief   UART Serial Connection
- *
- * CSC 460/560 Real Time Operating Systems - Mantis Cheng
- * @author Scott Craig
  * @author Justin Tanner
+ * @date   Sat Nov 22 21:32:03 2008
+ *
+ * @brief  UART Driver targetted for the AT90USB1287
+ *
  */
-
 #include "uart.h"
-#include <string.h>
 
-static uint8_t uart_TX_buf[UART_TX_BUF_MASK + 1];
-
-
-/** The position in the array of the next byte to be consumed. */
-static int head = 0;
-/** The position in the array of the next byte to inserted. */
-static int tail = 0;
-/** boolean to indicate buffer not empty */
-static int non_empty = 0;
-
+static volatile uint8_t uart_buffer[UART_BUFFER_SIZE];
+static volatile uint8_t uart_buffer_index;
 
 /**
- * Initialize UART
+ * Initalize UART
  *
  */
-void uart_init(void)
+void uart_init(UART_BPS bitrate)
 {
-    UCSR1A = UCSR1A_CFG;
-    UCSR1B = UCSR1B_CFG;
-    UCSR1C = UCSR1C_CFG;
+	UCSR1A = UCSR1A_CFG;
+	UCSR1B = UCSR1B_CFG;
+	UCSR1C = UCSR1C_CFG;
 
-    UBRR1H = UBRR1H_CFG;
-    UBRR1L = UBRR1L_CFG;
+	//UBRR1H = UBRR1H_CFG;
+	//UBRR1L = UBRR1L_CFG;
 
-    head = 0;
-    tail = 0;
-    non_empty = 0;
+	UBRR1H = 0;
+	// see AT90 hardware manual p205, for table of UBRR1 values.
+	switch (bitrate)
+	{
+	case UART_19200:
+		UBRR1L = 51;
+		break;
+	case UART_38400:
+		UBRR1L = 25;
+		break;
+	case UART_57600:
+		UBRR1L = 16;
+		break;
+	default:
+		UBRR1L = 16;
+	}
+
+    uart_buffer_index = 0;
+}
+
+/**
+ * Transmit one byte
+ * NOTE: This function uses busy waiting
+ *
+ * @param byte data to trasmit
+ */
+void uart_putchar(uint8_t byte)
+{
+    /* wait for empty transmit buffer */
+    while (!( UCSR1A & (1 << UDRE1)));
+
+    /* Put data into buffer, sends the data */
+    UDR1 = byte;
+}
+
+/**
+ * Receive a single byte from the receive buffer
+ *
+ * @param index
+ *
+ * @return
+ */
+uint8_t uart_get_byte(int index)
+{
+    if (index < UART_BUFFER_SIZE)
+    {
+        return uart_buffer[index];
+    }
+    return 0;
+}
+
+/**
+ * Get the number of bytes received on UART
+ *
+ * @return number of bytes received on UART
+ */
+uint8_t uart_bytes_received(void)
+{
+    return uart_buffer_index;
+}
+
+/**
+ * Prepares UART to receive another payload
+ *
+ */
+void uart_reset_receive(void)
+{
+    uart_buffer_index = 0;
+}
+
+/**
+ * UART receive byte ISR
+ */
+ISR(USART1_RX_vect)
+{
+    uart_buffer[uart_buffer_index] = UDR1;
+    uart_buffer_index = (uart_buffer_index + 1) % UART_BUFFER_SIZE;
 }
 
 
-/**
- * Copies a string into a buffer for the Uart
- * interrupt handler to write to the terminal.
- * If overflow occurs, older data is overwritten.
- *
- * @param str The string you want to send to the UART hyperterminal.
- * @param len length of the string
- *
- * @return -1 if overflow occurred.
- */
-int uart_write(uint8_t* const str, int len)
-{
-    int overflow = 0;
-    int i;
-    uint8_t sreg;
 
-    sreg = SREG;
-    Disable_Interrupt();
-
-    overflow = 0;
-    for(i = 0; i < len; ++i)
-    {
-        if(non_empty && head == tail) overflow = -1;
-
-        uart_TX_buf[tail] = str[i];
-
-        ++tail;
-        tail &= UART_TX_BUF_MASK;
-    }
-
-    if(overflow) head = tail;
-
-    if(len > 0)
-    {
-        TXIntEnable();
-        non_empty = 1;
-    }
-
-    SREG = sreg;
-
-    return overflow;
-}
-
-
-/**
- * Interrupt service routine for the UART transmission.
- */
-ISR(USART1_UDRE_vect)
-{
-    UDR1 = uart_TX_buf[head];
-
-    ++head;
-    head &= UART_TX_BUF_MASK;
-
-    /* Last byte was written? */
-    if (head == tail)
-    {
-        non_empty = 0;
-        TXIntDisable();
-    }
-}
 
 
