@@ -160,7 +160,8 @@ class Turtle:
     # strictly speaking, we dont need to keep track of state, it can be derived from
     # the current command being executed. However it is kept as a convenience
     m_state = PARKED
-    m_plan = ( Command(LED,1), Command(ARC,1000,90), Command(ARC,100,90), Command(SPIN,-90), Command(ARC,100,90), Command(ARC,1000,180) )
+    #m_plan = ( Command(LED,1), Command(ARC,1000,90), Command(ARC,100,90), Command(SPIN,-90), Command(ARC,100,90), Command(ARC,1000,180) )
+    m_plan = ( Command(SPIN, 360), Command(SPIN, 360),)
     m_index = -1
 
 
@@ -221,6 +222,7 @@ class Simulation:
             t.m_distance += s[1]
             
             # todo: halt if we get a bumper sensor reading
+            
             turnedThrough = ((360.0 * t.m_angle) / (258.0 * math.pi)) # in degrees, with clockwise meaning being negative
 
             # if we are parked and not done our plan, 
@@ -275,7 +277,7 @@ def main():
         
         simulation.update(clock.get_time())
         
-        screen.fill(kClrBlack)
+        #screen.fill(kClrBlack)
         simulation.draw(screen)
         
         pygame.display.update()
