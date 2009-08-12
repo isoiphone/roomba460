@@ -16,6 +16,7 @@
 
 
 uint8_t roomba_addr[5] = { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE };
+//uint8_t roomba_addr[5] = { 0xEE, 0xDD, 0xCC, 0xBB, 0xAA };
 volatile uint8_t rxflag = 0;
 radiopacket_t packet;
 
@@ -39,15 +40,6 @@ int main()
 	Radio_Configure(RADIO_2MBPS, RADIO_HIGHEST_POWER);
 
 	sei();
-
-	/* UART test - drive straight forward at 100 mm/s for 1 second
-	Roomba_Drive(100, 0x8000);
-
-	_delay_ms(1000);
-
-	Roomba_Drive(0, 0);
-
-	for (;;);*/
 
 	for (;;)
 	{
@@ -79,31 +71,42 @@ int main()
 				continue;
 			}
 
-			// Output the command to the Roomba, followed by its arguments.
-			uart_putchar(packet.payload.command.command);
-			for (i = 0; i < packet.payload.command.num_arg_bytes; i++)
+			if (packet.payload.command.command == I2C)
 			{
-				uart_putchar(packet.payload.command.arguments[i]);
-			}
+				uint8_t red = packet.payload.command.arguments[0];
+				uint8_t green = packet.payload.command.arguments[1];
+				uint8_t blue = packet.payload.command.arguments[2];
 
-			// Set the radio's destination address to be the remote station's address
-			Radio_Set_Tx_Addr(packet.payload.command.sender_address);
-
-			// Update the Roomba sensors into the packet structure that will be transmitted.
-			Roomba_UpdateSensorPacket(1, &packet.payload.sensors.sensors);
-			Roomba_UpdateSensorPacket(2, &packet.payload.sensors.sensors);
-			Roomba_UpdateSensorPacket(3, &packet.payload.sensors.sensors);
-
-			// send the sensor packet back to the remote station.
-			packet.type = SENSOR_DATA;
-
-			if (Radio_Transmit(&packet, RADIO_WAIT_FOR_TX) == RADIO_TX_MAX_RT)
-			{
-				PORTD ^= _BV(PD4);	// flash red if the packet was dropped
+				// TODO: send the rgb values to I2C
 			}
 			else
 			{
-				PORTD ^= _BV(PD5);	// flash green if the packet was received correctly
+				// Output the command to the Roomba, followed by its arguments.
+				uart_putchar(packet.payload.command.command);
+				for (i = 0; i < packet.payload.command.num_arg_bytes; i++)
+				{
+					uart_putchar(packet.payload.command.arguments[i]);
+				}
+
+				// Set the radio's destination address to be the remote station's address
+				Radio_Set_Tx_Addr(packet.payload.command.sender_address);
+
+				// Update the Roomba sensors into the packet structure that will be transmitted.
+				Roomba_UpdateSensorPacket(1, &packet.payload.sensors.sensors);
+				Roomba_UpdateSensorPacket(2, &packet.payload.sensors.sensors);
+				Roomba_UpdateSensorPacket(3, &packet.payload.sensors.sensors);
+
+				// send the sensor packet back to the remote station.
+				packet.type = SENSOR_DATA;
+
+				if (Radio_Transmit(&packet, RADIO_WAIT_FOR_TX) == RADIO_TX_MAX_RT)
+				{
+					PORTD ^= _BV(PD4);	// flash red if the packet was dropped
+				}
+				else
+				{
+					PORTD ^= _BV(PD5);	// flash green if the packet was received correctly
+				}
 			}
 		}
 	}

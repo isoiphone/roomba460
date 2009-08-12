@@ -10,6 +10,7 @@
 #include "OS/common.h"
 #include "OS/os.h"
 #include "radio.h"
+#include "roomba_sci.h"
 #include "uart.h"
 
 #define NUMBER_OF_TURTLES 2
@@ -42,7 +43,6 @@ typedef struct {
     // the current command being executed. However it is kept as a convenience
     int16_t state;
 
-    //int16_t plan = ( Command(LED,1), Command(ARC,1000,90), Command(ARC,100,90), Command(SPIN,-90), Command(ARC,100,90), Command(ARC,1000,180) )
     Command* plan;
 	int16_t plan_length;
     int16_t plan_index;
@@ -70,6 +70,19 @@ int16_t htons(int16_t value)
 	output.bytes.low_byte = input.bytes.high_byte;
 	output.bytes.high_byte = input.bytes.low_byte;
 	return output.value;
+}
+
+
+void drive(Turtle* turtle, int16_t velocity, int16_t radius)
+{
+	turtle->roomba_velocity = velocity;
+	turtle->roomba_radius = radius;
+}
+
+
+void set_led(Turtle* turtle, int16_t is_on)
+{
+	turtle->roomba_led = is_on;
 }
 
 
