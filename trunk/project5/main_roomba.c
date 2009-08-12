@@ -1,38 +1,28 @@
 /*
- * test.c
+ * main_roomba.c
  *
  *  Created on: 4-Feb-2009
  *      Author: nrqm
  */
 
-#include "roomba/roomba.h"
-#include "roomba/roomba_sci.h"
-#include "uart/uart.h"
+#include "roomba.h"
+#include "roomba_sci.h"
+#include "uart.h"
 #include <util/delay.h>
 #include "avr/interrupt.h"
-#include "radio/radio.h"
+#include "radio.h"
 
 #define     clock8MHz()    CLKPR = _BV(CLKPCE); CLKPR = 0x00;
 
 
 uint8_t roomba_addr[5] = { 0xAA, 0xBB, 0xCC, 0xDD, 0xEE };
-
 volatile uint8_t rxflag = 0;
-
 radiopacket_t packet;
 
-void roomba_Drive( int16_t velocity, int16_t radius )
-{
-	uart_putchar(DRIVE);
-	uart_putchar(HIGH_BYTE(velocity));
-	uart_putchar(LOW_BYTE(velocity));
-	uart_putchar(HIGH_BYTE(radius));
-	uart_putchar(LOW_BYTE(radius));
-}
 
 int main()
 {
-	uint8_t i;
+	uint16_t i;
 	clock8MHz();
 
 	cli();
@@ -51,11 +41,11 @@ int main()
 	sei();
 
 	/* UART test - drive straight forward at 100 mm/s for 1 second
-	roomba_Drive(100, 0x8000);
+	Roomba_Drive(100, 0x8000);
 
-	_delay_1s();
+	_delay_ms(1000);
 
-	roomba_Drive(0, 0);
+	Roomba_Drive(0, 0);
 
 	for (;;);*/
 
@@ -79,11 +69,11 @@ int main()
 			}
 
 			if (packet.payload.command.command == START ||
-					packet.payload.command.command == BAUD ||
-					packet.payload.command.command == CONTROL ||
-					packet.payload.command.command == SAFE ||
-					packet.payload.command.command == FULL ||
-					packet.payload.command.command == SENSORS)
+				packet.payload.command.command == BAUD ||
+				packet.payload.command.command == CONTROL ||
+				packet.payload.command.command == SAFE ||
+				packet.payload.command.command == FULL ||
+				packet.payload.command.command == SENSORS)
 			{
 				// Don't pass the listed commands to the Roomba.
 				continue;
