@@ -1,5 +1,5 @@
 /**
- * @file   base_station.c
+ * @file   main_base_station.c
  * @author Jason Wynja and Jacob Schwartz
  * @date   Mon Aug 10 14:26:30 2009
  *
@@ -15,18 +15,6 @@
 #define NUMBER_OF_TURTLES 2
 
 
-
-// Network address
-uint8_t my_addr[5] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
-
-// RTOS - Periodic project plan
-enum { SENDER_0=1, SENDER_1 };
-
-const unsigned char PPP[] = { IDLE, 5, SENDER_0, 5, SENDER_1, 5 };
-const unsigned int PT = sizeof(PPP) / 2;
-
-
-
 typedef struct {
 	int16_t command;
 	int16_t arg1;
@@ -34,22 +22,21 @@ typedef struct {
 } Command;
 
 
-
 typedef struct {
     // radio address for this roomba
-    uint8_t address[5];
+    uint8_t address[RADIO_ADDRESS_LENGTH];
         
+    // current roomba command arguments
+    int16_t roomba_led;
+	int16_t roomba_velocity;
+	int16_t roomba_radius;
+
     // sensor value accumulators
     int16_t angle;
     int16_t distance;
 
     // value we are trying to reach in this state (could use a distance or a time instead, for now we use angle)
     int16_t angle_target;
-
-    // current roomba command arguments
-    int16_t roomba_led;
-	int16_t roomba_velocity;
-	int16_t roomba_radius;
 
     // strictly speaking, we dont need to keep track of state, it can be derived from
     // the current command being executed. However it is kept as a convenience
@@ -61,8 +48,18 @@ typedef struct {
     int16_t plan_index;
 } Turtle;
 
-Turtle turtles[NUMBER_OF_TURTLES];
 
+Turtle turtles[NUMBER_OF_TURTLES];
+Command plan0[0] = {}; // todo
+Command plan1[0] = {}; // todo
+
+uint8_t my_addr[RADIO_ADDRESS_LENGTH] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
+
+// RTOS - Periodic project plan
+enum { SENDER_0=1, SENDER_1 };
+
+const unsigned char PPP[] = { IDLE, 5, SENDER_0, 5, SENDER_1, 5 };
+const unsigned int PT = sizeof(PPP) / 2;
 
 
 // Swap byte order
@@ -76,7 +73,6 @@ int16_t htons(int16_t value)
 }
 
 
-
 // Radio receiver
 EVENT* radio_receive_event;
 
@@ -85,21 +81,10 @@ void radio_rxhandler(uint8_t pipenumber)
 	Event_Signal(radio_receive_event);
 }
 
-void handle_received_packet(radiopacket_t* packet)
-{
-	if (packet->type == SENSOR_DATA)
-	{
-		/*roomba_sensor_data_t sensor_data = packet->payload.sensors.sensors;
-		
-		uint16_t current_ticks = Now();
-		uint16_t delta_ticks = current_ticks - previous_speed_update_ticks;
-
-		prev_distance = sensor_data.distance.value;
-		prev_time = delta_ticks * TICK;
-
-		previous_speed_update_ticks = current_ticks;*/
-	}
-}
+void task_radio_receive(void);
+void handle_received_packet(radiopacket_t* packet);
+int radio_addresses_are_equal(uint8_t* address1, uint8_t* address2);
+void update_sensor_data(Turtle* turtle, roomba_sensor_data_t sensor_data);
 
 void task_radio_receive(void)
 {
@@ -120,15 +105,53 @@ void task_radio_receive(void)
 	}
 }
 
+void handle_received_packet(radiopacket_t* packet)
+{
+	if (packet->type == SENSOR_DATA)
+	{
+        uint8_t* sender_address = packet->payload.command.sender_address;
+
+        int i;
+        for (i = 0; i < NUMBER_OF_TURTLES; ++i)
+        {
+            if (radio_addresses_are_equal(sender_address, turtles[i].address))
+            {
+                update_sensor_data(turtles + i, packet->payload.sensors.sensors);
+                break;
+            }
+        }
+	}
+}
+
+int radio_addresses_are_equal(uint8_t* address1, uint8_t* address2)
+{
+    int i;
+    for (i = 0; i < RADIO_ADDRESS_LENGTH; ++i)
+    {
+        if (address1[i] != address2[i])
+        {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+void update_sensor_data(Turtle* turtle, roomba_sensor_data_t sensor_data)
+{
+    // todo
+}
 
 
+
+// Radio sender
 void send_to_roomba(uint8_t* address, uint8_t command, uint8_t* arguments, uint8_t num_arg_bytes)
 {
 	radiopacket_t packet;
 	memset(&packet, 0, sizeof(packet));
 
 	packet.type = COMMAND;
-	memcpy(&packet.payload.command.sender_address, my_addr, 5);
+	memcpy(&packet.payload.command.sender_address, my_addr, RADIO_ADDRESS_LENGTH);
 	packet.payload.command.command = command;
 	packet.payload.command.num_arg_bytes = num_arg_bytes;
 
@@ -140,8 +163,6 @@ void send_to_roomba(uint8_t* address, uint8_t command, uint8_t* arguments, uint8
 }
 
 
-
-// Radio sender
 void task_radio_send(void)
 {
 	for (;;)
@@ -192,9 +213,6 @@ void initialize_systems(void)
 	Radio_Configure_Rx(RADIO_PIPE_0, my_addr, ENABLE);
 	Radio_Configure(RADIO_2MBPS, RADIO_HIGHEST_POWER);
 
-	// Initialize variables
-	radio_receive_event = Event_Init();
-
 	// Restore interrupt status
 	SREG = sreg;
 }
@@ -206,12 +224,16 @@ void initialize_turtles(void)
 	turtles[0].address[2] = 0xCC;
 	turtles[0].address[3] = 0xDD;
 	turtles[0].address[4] = 0xEE;
+    turtles[0].plan = plan0;
+    turtles[0].plan_length = sizeof(plan0);
 
 	turtles[1].address[0] = 0xEE;
 	turtles[1].address[1] = 0xDD;
 	turtles[1].address[2] = 0xCC;
 	turtles[1].address[3] = 0xBB;
 	turtles[1].address[4] = 0xAA;
+    turtles[1].plan = plan1;
+    turtles[1].plan_length = sizeof(plan1);
 }
 
 void create_tasks(void)
@@ -223,8 +245,9 @@ void create_tasks(void)
 
 int main(void)
 {
-	initialize_systems();
 	initialize_turtles();
+	radio_receive_event = Event_Init();
+	initialize_systems();
 
 	_delay_ms(10);
 
