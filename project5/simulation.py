@@ -12,6 +12,7 @@ kClrRoomba = (128,128,128)
 kClrLED = (200,200,255)
 
 kDriveSpeed = 300       # speed roomba drives at, will be dynamic in future, for now is a constant
+kSomeRad = 1000         # some arbitrary rad for the patterns to be scaled based on
 
 kMillimetersToPixels = 1.0 / 10.0 # 10mm per pixel, aka 100 pixel per meter
 kRoombaRadius = 170. # 34 cm in diameter says wiki, so 34/2 radius.
@@ -35,6 +36,9 @@ class Roomba:
     
     "LED state off,on"
     m_led = 0
+    
+    "offsceen surface used to draw persistent lines to"
+    m_offscreen = None
     
     "manually place the roomba in some starting position facing some direction"
     def place(self, position, heading):
@@ -104,6 +108,11 @@ class Roomba:
         self.m_distance += c
         
     def draw(self,screen):
+        if self.m_offscreen == None:
+            self.m_offscreen = screen.copy()
+            self.m_offscreen.fill(kClrBlack)
+            self.m_offscreen.set_colorkey(kClrBlack)
+            
         pos = int(round(self.m_position[0]*kMillimetersToPixels)), int(round(self.m_position[1]*kMillimetersToPixels))
 
         # body of roomba
@@ -119,7 +128,8 @@ class Roomba:
         
         # the LED
         if self.m_led != 0:
-            pygame.draw.circle(screen, kClrLED, pos, int(round(kLedRadius*kMillimetersToPixels)))
+            pygame.draw.circle(self.m_offscreen, kClrLED, pos, int(round(kLedRadius*kMillimetersToPixels)))
+            screen.blit(self.m_offscreen, (0,0))
     
 
 # a plan is a series of steps
@@ -162,7 +172,10 @@ class Turtle:
     # strictly speaking, we dont need to keep track of state, it can be derived from
     # the current command being executed. However it is kept as a convenience
     m_state = PARKED
-    m_plan = ( Command(LED,1), Command(ARC,500,300), Command(SPIN,160), Command(ARC,500,300) )
+    m_plan = ( Command(LED,1),
+              Command(ARC,kSomeRad,360), Command(SPIN,60),
+              Command(ARC,kSomeRad,360), Command(SPIN,60),
+              Command(ARC,kSomeRad,360), Command(SPIN,60),)
     m_index = -1
 
 
@@ -281,7 +294,7 @@ def main():
         
         simulation.update(clock.get_time())
         
-        #screen.fill(kClrBlack)
+        screen.fill(kClrBlack)
         simulation.draw(screen)
         
         pygame.display.update()
