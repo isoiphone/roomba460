@@ -35,7 +35,7 @@ HEX_EEPROM_FLAGS += --change-section-lma .eeprom=0 --no-change-warnings
 
 
 ## Objects that must be built in order to link
-OBJECTS = I2C_LED.o i2csw.o 
+OBJECTS = I2C_LED.o i2c.o 
 
 ## Objects explicitly added by the user
 LINKONLYOBJECTS = 
@@ -47,7 +47,7 @@ all: $(TARGET) I2C_LED.hex I2C_LED.eep I2C_LED.lss size
 I2C_LED.o: ../I2C_LED.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
-i2csw.o: ../i2csw.c
+i2c.o: ../i2c.c
 	$(CC) $(INCLUDES) $(CFLAGS) -c  $<
 
 ##Link
