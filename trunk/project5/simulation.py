@@ -11,9 +11,11 @@ kClrBumper = (128,128,255)
 kClrRoomba = (128,128,128)
 kClrLED = (200,200,255)
 
+kDriveSpeed = 300       # speed roomba drives at, will be dynamic in future, for now is a constant
+
 kMillimetersToPixels = 1.0 / 10.0 # 10mm per pixel, aka 100 pixel per meter
 kRoombaRadius = 170. # 34 cm in diameter says wiki, so 34/2 radius.
-kLedRadius = 20.0   # 1cm
+kLedRadius = 20.0   # 2cm
 kRoombaWheelSpacing = 258. # 258mm between wheels says the SCI spec document
 
 
@@ -160,8 +162,7 @@ class Turtle:
     # strictly speaking, we dont need to keep track of state, it can be derived from
     # the current command being executed. However it is kept as a convenience
     m_state = PARKED
-    #m_plan = ( Command(LED,1), Command(ARC,1000,90), Command(ARC,100,90), Command(SPIN,-90), Command(ARC,100,90), Command(ARC,1000,180) )
-    m_plan = ( Command(SPIN, 360), Command(SPIN, 360),)
+    m_plan = ( Command(LED,1), Command(ARC,500,300), Command(SPIN,160), Command(ARC,500,300) )
     m_index = -1
 
 
@@ -171,7 +172,7 @@ class Simulation:
     m_turtles = [Turtle(), Turtle()]
     
     def issueNextCommand(self, index):
-        print "issueNextCommand()"
+        #print "issueNextCommand()"
         t = self.m_turtles[index]
         r = self.m_roombas[index]
         
@@ -186,6 +187,9 @@ class Simulation:
             return
         
         # clear sensor accumulators
+        t.m_angle = t.m_distance = 0
+        
+        # clear target
         t.m_angleTarget = 0
         
         # decode next command
@@ -197,20 +201,20 @@ class Simulation:
         elif cmd.m_command == ARC:
             t.m_state = ARCING
             t.m_angleTarget = cmd.m_arg2
-            r.drive(200, cmd.m_arg1)
+            r.drive(kDriveSpeed, cmd.m_arg1)
         elif cmd.m_command == SPIN:
             t.m_state = SPINNING
             t.m_angleTarget = cmd.m_arg1
             # clockwise = -1, counterclockwise = 1
             if cmd.m_arg1 <= 0:
-                r.drive(200, -1)
+                r.drive(kDriveSpeed, -1)
             else:
-                r.drive(200, 1)
+                r.drive(kDriveSpeed, 1)
         elif cmd.m_command == LED:
             t.m_led = cmd.m_arg1
             r.setLED(cmd.m_arg1)
             self.issueNextCommand(index)
-
+        
     def executePlans(self):
         for i in range(len(self.m_turtles)):
             t = self.m_turtles[i]
@@ -232,9 +236,9 @@ class Simulation:
             elif t.m_state == ARCING or t.m_state == SPINNING:
                 if abs(turnedThrough) >= abs(t.m_angleTarget):
                     self.issueNextCommand(i)
-            else:
-                # we are in process of executing some command, just let it keep going
-                pass
+            
+            print i, ("parked", "arcing", "spinning")[t.m_state]
+
             
     def start(self):
         center = [int((kScreenSize[0]/2.)/kMillimetersToPixels),int((kScreenSize[1]/2.)/kMillimetersToPixels)]
