@@ -82,7 +82,7 @@ class Roomba:
         elapsedS = elapsedMs / 1000.0
         
         if self.m_radius == -1 or self.m_radius == +1:
-            theta = elapsedS * math.pi
+            theta = -1 * self.m_radius * elapsedS * math.pi
             self.m_heading += theta
             
             diff = theta*258.0*0.5
