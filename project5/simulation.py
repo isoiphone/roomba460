@@ -9,7 +9,6 @@ kFramesPerSecond = 20
 kClrBlack = (0,0,0)
 kClrBumper = (128,128,255)
 kClrRoomba = (128,128,128)
-kClrLED = (200,200,255)
 
 kDriveSpeed = 300       # speed roomba drives at, will be dynamic in future, for now is a constant
 kSomeRad = 1000         # some arbitrary rad for the patterns to be scaled based on
@@ -34,8 +33,8 @@ class Roomba:
     m_angle = 0.
     m_distance = 0.
     
-    "LED state off,on"
-    m_led = 0
+    "LED state R,G,B"
+    m_led = (0,0,0)
     
     "offsceen surface used to draw persistent lines to"
     m_offscreen = None
@@ -54,15 +53,19 @@ class Roomba:
         
         if radius == 0:
             self.m_radius = 100*1000*1000. # 1000m radius is close enough to infinite for me
+        else:
+            self.m_radius = float(radius)
+        """
         elif radius < 0 and radius > -50:
             self.m_radius = -50.0
         elif radius > 0 and radius < 50:
             self.m_radius = 50.0
         else:
             self.m_radius = float(radius)
-    
-    def setLED(self, state):
-        self.m_led = state
+        """
+        
+    def setLED(self, r,g,b):
+        self.m_led = (r,g,b)
         
     """
     read sensors
@@ -78,6 +81,14 @@ class Roomba:
         #self.m_position[0] += (340. * elapsedMs) / 1000.0
         elapsedS = elapsedMs / 1000.0
         
+        if self.m_radius == -1 or self.m_radius == +1:
+            theta = elapsedS * math.pi
+            self.m_heading += theta
+            
+            diff = theta*258.0*0.5
+            self.m_angle += diff
+            return
+            
         # turning radius
         r = self.m_radius
         
@@ -127,9 +138,11 @@ class Roomba:
         pygame.draw.line(screen, kClrBumper, (pos[0]+x1,pos[1]+y1), (pos[0]+x2,pos[1]+y2), 2)
         
         # the LED
-        if self.m_led != 0:
-            pygame.draw.circle(self.m_offscreen, kClrLED, pos, int(round(kLedRadius*kMillimetersToPixels)))
-            screen.blit(self.m_offscreen, (0,0))
+        if self.m_led != (0,0,0):
+            pygame.draw.circle(self.m_offscreen, self.m_led, pos, int(round(kLedRadius*kMillimetersToPixels)))
+            
+        screen.blit(self.m_offscreen, (0,0))
+        
     
 
 # a plan is a series of steps
@@ -141,14 +154,11 @@ LED = 3         # do something with the LED, arg1=command to send to LED (1 is o
 
 class Command:
     "structure that base station uses to represent an image / turtle command"
-    def __init__(self, command, arg1=None, arg2=None):
+    def __init__(self, command, arg1=None, arg2=None, arg3=None):
         self.m_command = command
         self.m_arg1 = arg1
         self.m_arg2 = arg2
-        
-    m_command = HALT
-    m_arg1 = 0
-    m_arg2 = 0
+        self.m_arg3 = arg3
 
 PARKED = 0
 ARCING = 1
@@ -166,16 +176,27 @@ class Turtle:
     # value we are trying to reach in this state (could use a distance or a time instead, for now we use angle)
     m_angleTarget = 0
 
-    # current pen / led state based on last command
-    m_led = 0
-    
     # strictly speaking, we dont need to keep track of state, it can be derived from
     # the current command being executed. However it is kept as a convenience
     m_state = PARKED
-    m_plan = ( Command(LED,1),
-              Command(ARC,kSomeRad,360), Command(SPIN,60),
-              Command(ARC,kSomeRad,360), Command(SPIN,60),
-              Command(ARC,kSomeRad,360), Command(SPIN,60),)
+
+    m_plan = (
+                #Command(LED,0x00,0x00,0x00), Command(ARC,kSomeRad,30), Command(SPIN,kSomeRad,30),
+              #Command(LED,0xEC,0x58,0x00), Command(ARC,kSomeRad*0.5,360),   # inner fruit
+              
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
+              Command(LED,0x6B,0x3F,0xA0), Command(ARC,kSomeRad,120),   # outer space
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
+              Command(SPIN,60), # offset
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
+              Command(LED,0x6B,0x3F,0xA0), Command(ARC,kSomeRad,120),   # outer space
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
+              Command(SPIN,60), # offset
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
+              Command(LED,0x6B,0x3F,0xA0), Command(ARC,kSomeRad,120),   # outer space
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
+              )
+
     m_index = -1
 
 
@@ -195,7 +216,7 @@ class Simulation:
         # if we hit the end of the plan, stop
         if t.m_index >= len(t.m_plan):
             t.m_state = PARKED
-            r.setLED(0)
+            r.setLED(0,0,0)
             r.drive(0,0)
             return
         
@@ -209,7 +230,7 @@ class Simulation:
         cmd = t.m_plan[t.m_index]
         if cmd.m_command == HALT:
             t.m_state = PARKED
-            r.setLED(0)
+            r.setLED(0,0,0)
             r.drive(0,0)
         elif cmd.m_command == ARC:
             t.m_state = ARCING
@@ -220,12 +241,11 @@ class Simulation:
             t.m_angleTarget = cmd.m_arg1
             # clockwise = -1, counterclockwise = 1
             if cmd.m_arg1 <= 0:
-                r.drive(kDriveSpeed, -1)
-            else:
                 r.drive(kDriveSpeed, 1)
+            else:
+                r.drive(kDriveSpeed, -1)
         elif cmd.m_command == LED:
-            t.m_led = cmd.m_arg1
-            r.setLED(cmd.m_arg1)
+            r.setLED(cmd.m_arg1,cmd.m_arg2,cmd.m_arg3)
             self.issueNextCommand(index)
         
     def executePlans(self):
@@ -250,7 +270,7 @@ class Simulation:
                 if abs(turnedThrough) >= abs(t.m_angleTarget):
                     self.issueNextCommand(i)
             
-            print i, ("parked", "arcing", "spinning")[t.m_state]
+            #print i, ("parked", "arcing", "spinning")[t.m_state]
 
             
     def start(self):
