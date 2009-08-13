@@ -38,7 +38,12 @@ int main()
 
 	Roomba_Init();
 
+	// init EYE TWO SEE ELL EE DEE
+	// and stop it from playing default light script.
 	i2cInit();
+	unsigned char cmdStop = 'o';
+	_delay_ms(10);
+	i2cMasterSend(0x00, 1, &cmdStop);
 
 	Radio_Init();
 	Radio_Configure_Rx(RADIO_PIPE_0, roomba_addr, ENABLE);
