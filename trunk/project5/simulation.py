@@ -11,7 +11,6 @@ kClrBumper = (128,128,255)
 kClrRoomba = (128,128,128)
 
 kDriveSpeed = 300       # speed roomba drives at, will be dynamic in future, for now is a constant
-kSomeRad = 1000         # some arbitrary rad for the patterns to be scaled based on
 
 kMillimetersToPixels = 1.0 / 10.0 # 10mm per pixel, aka 100 pixel per meter
 kRoombaRadius = 170. # 34 cm in diameter says wiki, so 34/2 radius.
@@ -164,6 +163,23 @@ PARKED = 0
 ARCING = 1
 SPINNING = 2
 
+kFlowerRad = 1000         # some arbitrary rad for the patterns to be scaled based on
+kHalfFlowerPlan = (
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kFlowerRad,120),   # 1/2 petal
+              Command(LED,0x48,0x29,0x6F), Command(ARC,kFlowerRad,120),   # outer space
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kFlowerRad,120),   # 1/2 petal
+              Command(SPIN,60), # offset
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kFlowerRad,120),   # 1/2 petal
+              Command(LED,0x48,0x29,0x6F), Command(ARC,kFlowerRad,120),   # outer space
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kFlowerRad,120),   # 1/2 petal
+              Command(SPIN,60), # offset
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kFlowerRad,120),   # 1/2 petal
+              Command(LED,0x48,0x29,0x6F), Command(ARC,kFlowerRad,120),   # outer space
+              Command(LED,0x52,0x18,0xFA), Command(ARC,kFlowerRad,120),   # 1/2 petal
+              Command(LED,0x00,0x00,0x00), Command(ARC,kFlowerRad*0.5,60), Command(SPIN,60), # position self
+              Command(LED,0xEC,0x58,0x00), Command(ARC,kFlowerRad*0.5,360),   # inner fruit
+              )
+
 class Turtle:
     "structure that base station uses to represent a roomba"
     # radio address for this roomba
@@ -180,6 +196,7 @@ class Turtle:
     # the current command being executed. However it is kept as a convenience
     m_state = PARKED
 
+    """
     m_plan = (
               Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
               Command(LED,0x6B,0x3F,0xA0), Command(ARC,kSomeRad,120),   # outer space
@@ -195,6 +212,8 @@ class Turtle:
               Command(LED,0x00,0x00,0x00), Command(ARC,kSomeRad*0.5,60), Command(SPIN,60), # position self
               Command(LED,0xEC,0x58,0x00), Command(ARC,kSomeRad*0.5,360),   # inner fruit
               )
+    """
+    m_plan = (Command(HALT),)
 
     m_index = -1
 
@@ -203,6 +222,8 @@ class Simulation:
     m_curTimeMs = 0.
     m_roombas = [Roomba(), Roomba()]
     m_turtles = [Turtle(), Turtle()]
+    #m_roombas = [Roomba(), ]
+    #m_turtles = [Turtle(), ]
     
     def issueNextCommand(self, index):
         #print "issueNextCommand()"
@@ -214,6 +235,7 @@ class Simulation:
         
         # if we hit the end of the plan, stop
         if t.m_index >= len(t.m_plan):
+            print "done"
             t.m_state = PARKED
             r.setLED(0,0,0)
             r.drive(0,0)
@@ -276,8 +298,15 @@ class Simulation:
         center = [int((kScreenSize[0]/2.)/kMillimetersToPixels),int((kScreenSize[1]/2.)/kMillimetersToPixels)]
         
         # start back-to-back in the center
+        # and instruct them to draw a flower!
+        
         self.m_roombas[0].place([center[0]-kRoombaRadius, center[1]], math.pi)
-        self.m_roombas[1].place([center[0]+kRoombaRadius, center[1]], 0)
+        self.m_turtles[0].m_plan = kHalfFlowerPlan
+        
+        if len(self.m_roombas) > 1:
+            self.m_roombas[1].place([center[0]+kRoombaRadius, center[1]], 0)
+            #self.m_turtles[1].m_plan = (Command(SPIN,360*2), ) + kHalfFlowerPlan
+            self.m_turtles[1].m_plan = kHalfFlowerPlan
         
     def update(self, elapsedMs):
         # simulation
