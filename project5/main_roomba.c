@@ -39,11 +39,16 @@ int main()
 	Roomba_Init();
 
 	// init EYE TWO SEE ELL EE DEE
-	// and stop it from playing default light script.
 	i2cInit();
-	unsigned char cmdStop = 'o';
 	_delay_ms(10);
+	
+	// stop any light script
+	unsigned char cmdStop = 'o';
 	i2cMasterSend(0x00, 1, &cmdStop);
+	
+	// set fade duration to 90 ticks, ~3 seconds
+	unsigned char cmdFadeSpeed[] = {'f', 90};
+	i2cMasterSend(0x00, 2, cmdFadeSpeed);
 
 	Radio_Init();
 	Radio_Configure_Rx(RADIO_PIPE_0, roomba_addr, ENABLE);
@@ -87,9 +92,9 @@ int main()
 				uint8_t green = packet.payload.command.arguments[1];
 				uint8_t blue = packet.payload.command.arguments[2];
 
-				unsigned char cmd[] = {'n', red, green, blue};
-				unsigned char cmdLen = 4;
-				i2cMasterSend(0x00, cmdLen, cmd);
+				// fade to new color
+				unsigned char cmd[] = {'c', red, green, blue};
+				i2cMasterSend(0x00, 4, cmd);
 			}
 			else
 			{
