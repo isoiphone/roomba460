@@ -181,9 +181,6 @@ class Turtle:
     m_state = PARKED
 
     m_plan = (
-                #Command(LED,0x00,0x00,0x00), Command(ARC,kSomeRad,30), Command(SPIN,kSomeRad,30),
-              #Command(LED,0xEC,0x58,0x00), Command(ARC,kSomeRad*0.5,360),   # inner fruit
-              
               Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
               Command(LED,0x6B,0x3F,0xA0), Command(ARC,kSomeRad,120),   # outer space
               Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
@@ -195,6 +192,8 @@ class Turtle:
               Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
               Command(LED,0x6B,0x3F,0xA0), Command(ARC,kSomeRad,120),   # outer space
               Command(LED,0x52,0x18,0xFA), Command(ARC,kSomeRad,120),   # 1/2 petal
+              Command(LED,0x00,0x00,0x00), Command(ARC,kSomeRad*0.5,60), Command(SPIN,60), # position self
+              Command(LED,0xEC,0x58,0x00), Command(ARC,kSomeRad*0.5,360),   # inner fruit
               )
 
     m_index = -1
