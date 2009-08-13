@@ -13,7 +13,9 @@
 #include "roomba_sci.h"
 #include "uart.h"
 
-#define NUMBER_OF_TURTLES 2
+#define DRIVE_SPEED 300
+#define NUMBER_OF_TURTLES 1
+#define PI 3.141592654
 
 
 typedef struct {
@@ -37,7 +39,7 @@ typedef struct {
     int16_t distance;
 
     // value we are trying to reach in this state (could use a distance or a time instead, for now we use angle)
-    int16_t angle_target;
+    float angle_target;
 
     // strictly speaking, we dont need to keep track of state, it can be derived from
     // the current command being executed. However it is kept as a convenience
@@ -49,16 +51,19 @@ typedef struct {
 } Turtle;
 
 
+enum { PARKED=1, ARCING, SPINNING };
+enum { HALT=1, MOVE_ARC, SPIN, SET_LED };
+
 Turtle turtles[NUMBER_OF_TURTLES];
-Command plan0[0] = {}; // todo
-Command plan1[0] = {}; // todo
+Command plan0[] = { { SET_LED, 1, 0 }, { MOVE_ARC, 500, 300 }, { SPIN, 160, 0 }, { MOVE_ARC, 500, 300 } }; // todo
+Command plan1[] = {}; // todo
 
 uint8_t my_addr[RADIO_ADDRESS_LENGTH] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
 
 // RTOS - Periodic project plan
-enum { SENDER_0=1, SENDER_1 };
+enum { EXECUTE_0=1, EXECUTE_1, SENDER_0, SENDER_1 };
 
-const unsigned char PPP[] = { IDLE, 5, SENDER_0, 5, SENDER_1, 5 };
+const unsigned char PPP[] = { EXECUTE_0, 3, EXECUTE_1, 3, SENDER_0, 2, SENDER_1, 2 };
 const unsigned int PT = sizeof(PPP) / 2;
 
 
@@ -88,9 +93,11 @@ void set_led(Turtle* turtle, int16_t is_on)
 
 // Radio receiver
 EVENT* radio_receive_event;
+volatile uint8_t rxflag = 0;
 
 void radio_rxhandler(uint8_t pipenumber)
 {
+	rxflag = 1;
 	Event_Signal(radio_receive_event);
 }
 
@@ -105,14 +112,16 @@ void task_radio_receive(void)
 	{
 		Event_Wait(radio_receive_event);
 
-		RADIO_RX_STATUS rx_status = RADIO_RX_MORE_PACKETS;
-
-		while (rx_status == RADIO_RX_MORE_PACKETS)
+		while (rxflag)
 		{
 			radiopacket_t packet;
 			memset(&packet, 0, sizeof(packet));
 
-			rx_status = Radio_Receive(&packet);
+			if (Radio_Receive(&packet) != RADIO_RX_MORE_PACKETS)
+			{
+				rxflag = 0;
+			}
+
 			handle_received_packet(&packet);
 		}
 	}
@@ -152,7 +161,8 @@ int radio_addresses_are_equal(uint8_t* address1, uint8_t* address2)
 
 void update_sensor_data(Turtle* turtle, roomba_sensor_data_t sensor_data)
 {
-    // todo
+    turtle->angle += sensor_data.angle.value;
+    turtle->distance += sensor_data.distance.value;
 }
 
 
@@ -212,6 +222,101 @@ void task_radio_send(void)
 }
 
 
+float float_abs(float value)
+{
+	if (value < 0.0)
+	{
+		value = value * -1.0;
+	}
+
+	return value;
+}
+
+
+void halt_turtle(Turtle* turtle)
+{
+	turtle->state = PARKED;
+	set_led(turtle, 0);
+	drive(turtle, 0, 0);
+}
+
+
+void issueNextCommand(Turtle* turtle)
+{
+	turtle->plan_index++;
+
+	if (turtle->plan_index >= turtle->plan_length)
+	{
+		halt_turtle(turtle);
+		return;
+	}
+
+	turtle->angle = turtle->distance = 0;
+	turtle->angle_target = 0.0;
+
+	Command* command = turtle->plan + turtle->plan_index;
+
+	switch (command->command)
+	{
+		case HALT:
+			halt_turtle(turtle);
+			break;
+
+		case MOVE_ARC:
+			turtle->state = ARCING;
+			turtle->angle_target = command->arg2;
+			drive(turtle, DRIVE_SPEED, command->arg1);
+			break;
+
+		case SPIN:
+			turtle->state = SPINNING;
+			turtle->angle_target = command->arg1;
+
+            if (command->arg1 <= 0)
+			{
+                drive(turtle, DRIVE_SPEED, -1); // clockwise
+			}
+            else
+			{
+                drive(turtle, DRIVE_SPEED, 1); // counterclockwise
+			}
+
+			break;
+
+		case SET_LED:
+			set_led(turtle, command->arg1);
+			issueNextCommand(turtle);
+			break;
+	}
+}
+
+
+void task_execute_plan(void)
+{
+	for (;;)
+	{
+    	int index = Task_GetArg();
+		Turtle* turtle = turtles + index;
+
+		// in degrees, with clockwise meaning being negative
+		float turned_through = (360.0 * turtle->angle) / (258.0 * PI);
+
+		if (turtle->state == PARKED && turtle->plan_index < turtle->plan_length)
+		{
+			issueNextCommand(turtle);
+		}
+		else if (turtle->state == ARCING || turtle->state == SPINNING)
+		{
+			if (float_abs(turned_through) >= float_abs(turtle->angle_target))
+			{
+				issueNextCommand(turtle);
+			}
+		}
+
+		Task_Next();
+	}
+}
+
 
 void initialize_systems(void)
 {
@@ -239,7 +344,9 @@ void initialize_turtles(void)
 	turtles[0].address[4] = 0xEE;
     turtles[0].plan = plan0;
     turtles[0].plan_length = sizeof(plan0);
-
+	turtles[0].plan_index = -1;
+	turtles[0].state = PARKED;
+/*
 	turtles[1].address[0] = 0xEE;
 	turtles[1].address[1] = 0xDD;
 	turtles[1].address[2] = 0xCC;
@@ -247,13 +354,17 @@ void initialize_turtles(void)
 	turtles[1].address[4] = 0xAA;
     turtles[1].plan = plan1;
     turtles[1].plan_length = sizeof(plan1);
+	turtles[1].plan_index = -1;
+	turtles[1].state = PARKED;*/
 }
 
 void create_tasks(void)
 {
 	Task_Create(task_radio_receive, 0, SYSTEM, 0);
+	Task_Create(task_execute_plan, 0, PERIODIC, EXECUTE_0);
+	//Task_Create(task_execute_plan, 1, PERIODIC, EXECUTE_1);
 	Task_Create(task_radio_send, 0, PERIODIC, SENDER_0);
-	Task_Create(task_radio_send, 1, PERIODIC, SENDER_1);
+	//Task_Create(task_radio_send, 1, PERIODIC, SENDER_1);
 }
 
 int main(void)
