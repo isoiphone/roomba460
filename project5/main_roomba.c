@@ -5,12 +5,15 @@
  *      Author: nrqm
  */
 
+
 #include "roomba.h"
 #include "roomba_sci.h"
 #include "uart.h"
 #include <util/delay.h>
 #include "avr/interrupt.h"
 #include "radio.h"
+
+#include "I2C/i2c.h"
 
 #define     clock8MHz()    CLKPR = _BV(CLKPCE); CLKPR = 0x00;
 
@@ -34,6 +37,8 @@ int main()
 	PORTD = 0x00;
 
 	Roomba_Init();
+
+	i2cInit();
 
 	Radio_Init();
 	Radio_Configure_Rx(RADIO_PIPE_0, roomba_addr, ENABLE);
@@ -77,7 +82,9 @@ int main()
 				uint8_t green = packet.payload.command.arguments[1];
 				uint8_t blue = packet.payload.command.arguments[2];
 
-				// TODO: send the rgb values to I2C
+				unsigned char cmd[] = {'n', red, green, blue};
+				unsigned char cmdLen = 4;
+				i2cMasterSend(0x00, cmdLen, cmd);
 			}
 			else
 			{
