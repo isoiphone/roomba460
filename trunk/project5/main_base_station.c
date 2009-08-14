@@ -22,6 +22,7 @@ typedef struct {
 	int16_t command;
 	int16_t arg1;
 	int16_t arg2;
+	int16_t arg3;
 } Command;
 
 
@@ -30,7 +31,9 @@ typedef struct {
     uint8_t address[RADIO_ADDRESS_LENGTH];
         
     // current roomba command arguments
-    int16_t roomba_led;
+    uint8_t roomba_led_red;
+    uint8_t roomba_led_green;
+    uint8_t roomba_led_blue;
 	int16_t roomba_velocity;
 	int16_t roomba_radius;
 
@@ -55,15 +58,37 @@ enum { PARKED=1, ARCING, SPINNING };
 enum { HALT=1, MOVE_ARC, SPIN, SET_LED };
 
 Turtle turtles[NUMBER_OF_TURTLES];
-Command plan0[] = { { SET_LED, 1, 0 }, { MOVE_ARC, 500, 300 }, { SPIN, 160, 0 }, { MOVE_ARC, 500, 300 } }; // todo
-Command plan1[] = {}; // todo
+
+/*Command plan0[] = { { SET_LED, 255, 0, 0 },
+					{ MOVE_ARC, 400, 360, 0 },
+					{ SET_LED, 0, 255, 0 },
+					{ SPIN, 180, 0, 0 },
+					{ MOVE_ARC, -400, -360, 0 },
+					{ SET_LED, 0, 0, 255 } };*/
+
+Command plan0[] = { { SET_LED, 0x52, 0x18, 0xFA }, { MOVE_ARC, 400, 120, 0 },
+					{ SET_LED, 0x48, 0x29, 0x6F }, { MOVE_ARC, 400, 120, 0 },
+					{ SET_LED, 0x52, 0x18, 0xFA }, { MOVE_ARC, 400, 120, 0 },
+					{ SPIN, 60, 0, 0 },
+					{ SET_LED, 0x52, 0x18, 0xFA }, { MOVE_ARC, 400, 120, 0 },
+					{ SET_LED, 0x48, 0x29, 0x6F }, { MOVE_ARC, 400, 120, 0 },
+					{ SET_LED, 0x52, 0x18, 0xFA }, { MOVE_ARC, 400, 120, 0 },
+					{ SPIN, 60, 0, 0 },
+					{ SET_LED, 0x52, 0x18, 0xFA }, { MOVE_ARC, 400, 120, 0 },
+					{ SET_LED, 0x48, 0x29, 0x6F }, { MOVE_ARC, 400, 120, 0 },
+					{ SET_LED, 0x52, 0x18, 0xFA }, { MOVE_ARC, 400, 120, 0 },
+					{ SET_LED, 0x00, 0x00, 0x00 }, { MOVE_ARC, 200, 60, 0 },
+					{ SET_LED, 0xEC, 0x58, 0x00 }, { MOVE_ARC, 200, 360, 0 } };
+
+//Command plan1[] = {};
 
 uint8_t my_addr[RADIO_ADDRESS_LENGTH] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
 
 // RTOS - Periodic project plan
 enum { EXECUTE_0=1, EXECUTE_1, SENDER_0, SENDER_1 };
 
-const unsigned char PPP[] = { EXECUTE_0, 3, EXECUTE_1, 3, SENDER_0, 2, SENDER_1, 2 };
+//const unsigned char PPP[] = { EXECUTE_0, 4, EXECUTE_1, 4, SENDER_0, 21, SENDER_1, 21 };
+const unsigned char PPP[] = { EXECUTE_0, 4, SENDER_0, 21 };
 const unsigned int PT = sizeof(PPP) / 2;
 
 
@@ -85,9 +110,11 @@ void drive(Turtle* turtle, int16_t velocity, int16_t radius)
 }
 
 
-void set_led(Turtle* turtle, int16_t is_on)
+void set_led(Turtle* turtle, uint8_t led_red, uint8_t led_green, uint8_t led_blue)
 {
-	turtle->roomba_led = is_on;
+	turtle->roomba_led_red = led_red;
+	turtle->roomba_led_green = led_green;
+	turtle->roomba_led_blue = led_blue;
 }
 
 
@@ -201,20 +228,9 @@ void task_radio_send(void)
 		send_to_roomba(turtles[index].address, DRIVE, drive_arguments, sizeof(drive_arguments));
 
 		uint8_t i2c_arguments[3];
-
-		if (turtles[index].roomba_led == 0)
-		{
-			i2c_arguments[0] = 0;
-			i2c_arguments[1] = 0;
-			i2c_arguments[2] = 0;
-		}
-		else
-		{
-			i2c_arguments[0] = 0xFF;
-			i2c_arguments[1] = 0xFF;
-			i2c_arguments[2] = 0xFF;
-		}
-
+		i2c_arguments[0] = turtles[index].roomba_led_red;
+		i2c_arguments[1] = turtles[index].roomba_led_green;
+		i2c_arguments[2] = turtles[index].roomba_led_blue;
 		send_to_roomba(turtles[index].address, I2C, i2c_arguments, sizeof(i2c_arguments));
 
 		Task_Next();
@@ -236,7 +252,7 @@ float float_abs(float value)
 void halt_turtle(Turtle* turtle)
 {
 	turtle->state = PARKED;
-	set_led(turtle, 0);
+	set_led(turtle, 0, 0, 0);
 	drive(turtle, 0, 0);
 }
 
@@ -274,17 +290,17 @@ void issueNextCommand(Turtle* turtle)
 
             if (command->arg1 <= 0)
 			{
-                drive(turtle, DRIVE_SPEED, -1); // clockwise
+                drive(turtle, DRIVE_SPEED, 1);
 			}
             else
 			{
-                drive(turtle, DRIVE_SPEED, 1); // counterclockwise
+                drive(turtle, DRIVE_SPEED, -1);
 			}
 
 			break;
 
 		case SET_LED:
-			set_led(turtle, command->arg1);
+			set_led(turtle, command->arg1, command->arg2, command->arg3);
 			issueNextCommand(turtle);
 			break;
 	}
@@ -325,7 +341,7 @@ void initialize_systems(void)
 	Disable_Interrupt();
 
 	// Initialize peripherals
-    uart_init(UART_DEFAULT);
+    //uart_init(UART_DEFAULT);
 
 	Radio_Init();
 	Radio_Configure_Rx(RADIO_PIPE_0, my_addr, ENABLE);
@@ -343,7 +359,7 @@ void initialize_turtles(void)
 	turtles[0].address[3] = 0xDD;
 	turtles[0].address[4] = 0xEE;
     turtles[0].plan = plan0;
-    turtles[0].plan_length = sizeof(plan0);
+    turtles[0].plan_length = sizeof(plan0) / sizeof(Command);
 	turtles[0].plan_index = -1;
 	turtles[0].state = PARKED;
 /*
@@ -353,7 +369,7 @@ void initialize_turtles(void)
 	turtles[1].address[3] = 0xBB;
 	turtles[1].address[4] = 0xAA;
     turtles[1].plan = plan1;
-    turtles[1].plan_length = sizeof(plan1);
+    turtles[1].plan_length = sizeof(plan1) / sizeof(Command);
 	turtles[1].plan_index = -1;
 	turtles[1].state = PARKED;*/
 }
