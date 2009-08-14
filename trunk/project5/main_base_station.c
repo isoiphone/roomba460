@@ -13,8 +13,8 @@
 #include "roomba_sci.h"
 #include "uart.h"
 
-#define DRIVE_SPEED 300
-#define NUMBER_OF_TURTLES 1
+#define DRIVE_SPEED 150
+#define NUMBER_OF_TURTLES 2
 #define PI 3.141592654
 
 
@@ -59,13 +59,6 @@ enum { HALT=1, MOVE_ARC, SPIN, SET_LED };
 
 Turtle turtles[NUMBER_OF_TURTLES];
 
-/*Command plan0[] = { { SET_LED, 255, 0, 0 },
-					{ MOVE_ARC, 400, 360, 0 },
-					{ SET_LED, 0, 255, 0 },
-					{ SPIN, 180, 0, 0 },
-					{ MOVE_ARC, -400, -360, 0 },
-					{ SET_LED, 0, 0, 255 } };*/
-
 Command plan0[] = { { SET_LED, 0x52, 0x18, 0xFA }, { MOVE_ARC, 400, 120, 0 },
 					{ SET_LED, 0x48, 0x29, 0x6F }, { MOVE_ARC, 400, 120, 0 },
 					{ SET_LED, 0x52, 0x18, 0xFA }, { MOVE_ARC, 400, 120, 0 },
@@ -80,15 +73,15 @@ Command plan0[] = { { SET_LED, 0x52, 0x18, 0xFA }, { MOVE_ARC, 400, 120, 0 },
 					{ SET_LED, 0x00, 0x00, 0x00 }, { MOVE_ARC, 200, 60, 0 },
 					{ SET_LED, 0xEC, 0x58, 0x00 }, { MOVE_ARC, 200, 360, 0 } };
 
-//Command plan1[] = {};
+Command plan1[] = {};
 
 uint8_t my_addr[RADIO_ADDRESS_LENGTH] = { 0x77, 0x77, 0x77, 0x77, 0x77 };
 
 // RTOS - Periodic project plan
 enum { EXECUTE_0=1, EXECUTE_1, SENDER_0, SENDER_1 };
 
-//const unsigned char PPP[] = { EXECUTE_0, 4, EXECUTE_1, 4, SENDER_0, 21, SENDER_1, 21 };
-const unsigned char PPP[] = { EXECUTE_0, 4, SENDER_0, 21 };
+const unsigned char PPP[] = { EXECUTE_0, 4, EXECUTE_1, 4, SENDER_0, 21, SENDER_1, 21 };
+//const unsigned char PPP[] = { EXECUTE_0, 8, SENDER_0, 42 };
 const unsigned int PT = sizeof(PPP) / 2;
 
 
@@ -267,7 +260,8 @@ void issueNextCommand(Turtle* turtle)
 		return;
 	}
 
-	turtle->angle = turtle->distance = 0;
+	turtle->angle = 0;
+	turtle->distance = 0;
 	turtle->angle_target = 0.0;
 
 	Command* command = turtle->plan + turtle->plan_index;
@@ -323,7 +317,7 @@ void task_execute_plan(void)
 		}
 		else if (turtle->state == ARCING || turtle->state == SPINNING)
 		{
-			if (float_abs(turned_through) >= float_abs(turtle->angle_target))
+			if (float_abs(turned_through) + 12.0 >= float_abs(turtle->angle_target))
 			{
 				issueNextCommand(turtle);
 			}
@@ -362,7 +356,7 @@ void initialize_turtles(void)
     turtles[0].plan_length = sizeof(plan0) / sizeof(Command);
 	turtles[0].plan_index = -1;
 	turtles[0].state = PARKED;
-/*
+
 	turtles[1].address[0] = 0xEE;
 	turtles[1].address[1] = 0xDD;
 	turtles[1].address[2] = 0xCC;
@@ -371,16 +365,16 @@ void initialize_turtles(void)
     turtles[1].plan = plan1;
     turtles[1].plan_length = sizeof(plan1) / sizeof(Command);
 	turtles[1].plan_index = -1;
-	turtles[1].state = PARKED;*/
+	turtles[1].state = PARKED;
 }
 
 void create_tasks(void)
 {
 	Task_Create(task_radio_receive, 0, SYSTEM, 0);
 	Task_Create(task_execute_plan, 0, PERIODIC, EXECUTE_0);
-	//Task_Create(task_execute_plan, 1, PERIODIC, EXECUTE_1);
+	Task_Create(task_execute_plan, 1, PERIODIC, EXECUTE_1);
 	Task_Create(task_radio_send, 0, PERIODIC, SENDER_0);
-	//Task_Create(task_radio_send, 1, PERIODIC, SENDER_1);
+	Task_Create(task_radio_send, 1, PERIODIC, SENDER_1);
 }
 
 int main(void)
