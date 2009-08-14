@@ -41,11 +41,11 @@ int main()
 	// init EYE TWO SEE ELL EE DEE
 	i2cInit();
 	_delay_ms(10);
-	
+
 	// stop any light script
 	unsigned char cmdStop = 'o';
 	i2cMasterSend(0x00, 1, &cmdStop);
-	
+
 	// set fade duration to 90 ticks, ~3 seconds
 	unsigned char cmdFadeSpeed[] = {'f', 90};
 	i2cMasterSend(0x00, 2, cmdFadeSpeed);
@@ -115,6 +115,7 @@ int main()
 
 				// send the sensor packet back to the remote station.
 				packet.type = SENSOR_DATA;
+				memcpy(&packet.payload.command.sender_address, roomba_addr, RADIO_ADDRESS_LENGTH);
 
 				if (Radio_Transmit(&packet, RADIO_WAIT_FOR_TX) == RADIO_TX_MAX_RT)
 				{
