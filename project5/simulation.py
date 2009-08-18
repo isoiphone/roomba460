@@ -180,6 +180,62 @@ kHalfFlowerPlan = (
               Command(LED,0xEC,0x58,0x00), Command(ARC,kFlowerRad*0.5,360),   # inner fruit
               )
 
+kJasonsPlan = ( Command( LED, 0xFF, 0x00, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0xFF, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0x00, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0xFF, 0x00, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0xFF, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0xFF, 0xFF, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0xFF, 0x77, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x77, 0xFF, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0xFF, 0x77 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0x77, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x77, 0x00, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0xFF, 0x00, 0x77 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0x00, 0x00 ), Command( ARC, 200, 60, 0 ),
+					Command( LED, 0xEC, 0x58, 0x00 ), Command( ARC, 200, 360, 0 ),
+					Command( LED, 0x00, 0x00, 0x00 ), Command( ARC, 800, 180, 0 ),
+					Command( LED, 0xFF, 0x00, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0xFF, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0x00, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0xFF, 0x00, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0xFF, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0xFF, 0xFF, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0xFF, 0x77, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x77, 0xFF, 0x00 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0xFF, 0x77 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0x77, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x77, 0x00, 0xFF ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0xFF, 0x00, 0x77 ), Command( ARC, 400, 360, 0 ),
+					Command( SPIN, 30, 0, 0 ),
+					Command( LED, 0x00, 0x00, 0x00 ), Command( ARC, 200, 60, 0 ),
+					Command( LED, 0xEC, 0x58, 0x00 ), Command( ARC, 200, 360, 0 ) )
+
+kJasonsCalibration = 3.5
+
 class Turtle:
     "structure that base station uses to represent a roomba"
     # radio address for this roomba
@@ -220,10 +276,10 @@ class Turtle:
 
 class Simulation:
     m_curTimeMs = 0.
-    m_roombas = [Roomba(), Roomba()]
-    m_turtles = [Turtle(), Turtle()]
-    #m_roombas = [Roomba(), ]
-    #m_turtles = [Turtle(), ]
+    #m_roombas = [Roomba(), Roomba()]
+    #m_turtles = [Turtle(), Turtle()]
+    m_roombas = [Roomba(), ]
+    m_turtles = [Turtle(), ]
     
     def issueNextCommand(self, index):
         #print "issueNextCommand()"
@@ -288,7 +344,7 @@ class Simulation:
                 self.issueNextCommand(i)
             # if we have completed this arc, or if we have completed this spin, 
             elif t.m_state == ARCING or t.m_state == SPINNING:
-                if abs(turnedThrough) >= abs(t.m_angleTarget):
+                if abs(turnedThrough) + kJasonsCalibration >= abs(t.m_angleTarget):
                     self.issueNextCommand(i)
             
             #print i, ("parked", "arcing", "spinning")[t.m_state]
@@ -300,6 +356,7 @@ class Simulation:
         # start back-to-back in the center
         # and instruct them to draw a flower!
         
+        """
         self.m_roombas[0].place([center[0]-kRoombaRadius, center[1]], math.pi)
         self.m_turtles[0].m_plan = kHalfFlowerPlan
         
@@ -307,6 +364,9 @@ class Simulation:
             self.m_roombas[1].place([center[0]+kRoombaRadius, center[1]], 0)
             #self.m_turtles[1].m_plan = (Command(SPIN,360*2), ) + kHalfFlowerPlan
             self.m_turtles[1].m_plan = kHalfFlowerPlan
+        """
+        self.m_roombas[0].place([center[0]+500, center[1]-1000], math.pi)
+        self.m_turtles[0].m_plan = kJasonsPlan
         
     def update(self, elapsedMs):
         # simulation
